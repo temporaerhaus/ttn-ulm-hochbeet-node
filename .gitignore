@@ -1,4 +1,5 @@
 .pio
+.vscode
 CMakeListsPrivate.txt
 .idea
 cmake-build-debug
