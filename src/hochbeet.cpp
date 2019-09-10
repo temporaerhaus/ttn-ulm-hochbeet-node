@@ -11,10 +11,20 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
 
+#ifdef LOW_POWER
+    #include "LowPower.h"
+#endif
+
+#ifdef RTC
+    #include <RTCZero.h>
+    RTCZero rtc;
+#endif
+
 // declaring functions
 void onEvent(ev_t ev);
 void do_send(osjob_t* j);
 int sonic();
+void sleepForSeconds(int seconds);
 
 //***************************
 // TTN und LMIC
@@ -106,8 +116,12 @@ void onEvent (ev_t ev) {
                 Serial.print(LMIC.dataLen);
                 Serial.println(F(" bytes of payload"));
             }
-            // Schedule next transmission
-            os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
+            
+            sleepForSeconds(TX_INTERVAL);
+
+            // Schedule next transmission to be immediately after this
+            os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(1), do_send);
+
             break;
         case EV_LOST_TSYNC:
             Serial.println(F("EV_LOST_TSYNC"));
@@ -197,6 +211,13 @@ void setup() {
     Serial.begin(115200);
     Serial.println(F("Starting"));
 
+    #ifdef RTC
+        // configure RTC
+        rtc.begin();
+        rtc.setTime(0, 0, 0);
+        rtc.setDate(1, 1, (uint8_t)1970);
+    #endif
+
     //***********************
     // Pins und Sensoren
     //***********************
@@ -279,4 +300,66 @@ int sonic() {
     delay(100);
 
     return distance;
+}
+
+#ifdef RTC
+void alarmMatch() {
+    #ifdef DEBUG
+      SerialUSB.print(F("alarmMatch() Woke up.\n"));
+    #endif
+
+    rtc.detachInterrupt();
+}
+
+void alarmSet(int alarmDelaySeconds) {
+    int alarmTimeSeconds = rtc.getSeconds();
+    int alarmTimeMinutes = rtc.getMinutes();
+
+    alarmTimeMinutes = (alarmTimeMinutes + ( alarmDelaySeconds / 60 )) % 60;
+    alarmTimeSeconds = (alarmTimeSeconds + ( alarmDelaySeconds % 60 )) % 60;
+
+    #ifdef DEBUG
+      Serial.print(F("Setting next alarm timer:\n  (rtc.getMinutes / rtc.getSeconds / alarmDelaySeconds / alarmTimeMinutes / alarmTimeSeconds)\n  "));
+      Serial.print(rtc.getMinutes());
+      Serial.print(" / ");
+      Serial.print(rtc.getSeconds());
+      Serial.print(" / ");
+      Serial.print(alarmDelaySeconds);
+      Serial.print(" / ");
+      Serial.print(alarmTimeMinutes);
+      Serial.print(" / ");
+      Serial.print(alarmTimeMinutes);
+      Serial.print("\n");
+    #endif
+
+    rtc.setAlarmSeconds(alarmTimeSeconds);
+    rtc.setAlarmMinutes(alarmTimeMinutes);
+    rtc.enableAlarm(rtc.MATCH_MMSS);
+    rtc.attachInterrupt(alarmMatch);
+
+    #ifdef DEBUG
+      SerialUSB.println("alarmSet() complete") ;
+    #endif
+}
+
+
+
+#endif
+
+void sleepForSeconds(int seconds) {
+    // Ensure all debugging messages are sent before sleep
+    Serial.flush();
+    
+    #ifdef LOW_POWER
+        // Going into sleep for more than 8 s – any better idea?
+        int sleepCycles = round(seconds / 8) ;
+        for(int i = 0; i < sleepCycles; i++) {
+              LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
+        }
+    #endif
+
+    #ifdef RTC
+        alarmSet(seconds);
+        rtc.standbyMode();
+    #endif
 }
