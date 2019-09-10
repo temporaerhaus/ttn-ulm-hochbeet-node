@@ -8,7 +8,8 @@
 #include <lmic.h>
 #include <hal/hal.h>
 #include <SPI.h>
-#include <DHT.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
 
 // declaring functions
 void onEvent(ev_t ev);
@@ -34,8 +35,8 @@ const lmic_pinmap lmic_pins = {
 //***************************
 // Pins und Sensoren
 //***************************
-DHT dht;
-#define PIN_DHT 5
+Adafruit_BME280 bme; // I2C, depending on your BME, you have to use address 0x77 (default) or 0x76, see below
+#define BME_ADDR 0x76 // use address 0x77 (default) or 0x76
 #define PIN_SONIC_TRIG 3
 #define PIN_SONIC_ECHO 4
 
@@ -144,19 +145,24 @@ void do_send(osjob_t* j){
     } else {
 
         //****************
-        // DHT Read
+        // BME Read
         //****************
-        Serial.println(F("DHT wait"));
-        delay(dht.getMinimumSamplingPeriod());
-        Serial.println(F("DHT read"));
-        float hum = dht.getHumidity();
-        int hum_int = hum * 100;
-        float temp = dht.getTemperature();
-        int temp_int = temp * 100;
-        Serial.print(hum);
-        Serial.print("\t");
-        Serial.print(temp);
-        Serial.println("");
+        bme.takeForcedMeasurement();
+
+        // temp
+        int temp_int = round(bme.readTemperature() * 100);
+        Serial.print("Temp: ");
+        Serial.println(temp_int);
+
+        // pressure
+        int pressure_int = round(bme.readPressure()/100);
+        Serial.print("Pressure: ");
+        Serial.println(pressure_int);
+
+        // humidity
+        int hum_int = round(bme.readHumidity() * 100);
+        Serial.print("Humidity: ");
+        Serial.println(hum_int);
 
         //****************
         // Sonic Read
@@ -166,15 +172,17 @@ void do_send(osjob_t* j){
         //****************
         // Payload
         //****************
-        byte payload[6];
+        byte payload[8];
         // dht hum and temp
         payload[0] = highByte(hum_int);
         payload[1] = lowByte(hum_int);
         payload[2] = highByte(temp_int);
         payload[3] = lowByte(temp_int);
+        payload[4] = lowByte(pressure_int);
+        payload[5] = lowByte(pressure_int);
         // distance (could also be encoded in one byte for the hochbeet?)
-        payload[4] = highByte(distance);
-        payload[5] = lowByte(distance);
+        payload[6] = highByte(distance);
+        payload[7] = lowByte(distance);
 
         LMIC_setTxData2(1, (uint8_t*)payload, sizeof(payload), 0);
         Serial.println(F("Packet queued"));
@@ -192,7 +200,25 @@ void setup() {
     //***********************
     // Pins und Sensoren
     //***********************
-    dht.setup(PIN_DHT);
+    // Setup BME280
+    if (!bme.begin(BME280_ADDRESS)) {
+        Serial.println("Could not find a valid BME280 sensor, check wiring!");
+        while (1);
+    }
+        
+
+        // Set BME in force mode to reduce power consumption
+        // force mode = measure, store results, and go into sleep mode
+        // until next measurement, see
+        // - http://tinkerman.cat/low-power-weather-station-bme280-moteino/
+        // - https://github.com/adafruit/Adafruit_BME280_Library/blob/master/examples/advancedsettings/advancedsettings.ino
+        // values taken from example of 'Weather / Climate Monitor"
+        bme.setSampling(Adafruit_BME280::MODE_FORCED,
+                        Adafruit_BME280::SAMPLING_X1, // temperature
+                        Adafruit_BME280::SAMPLING_X1, // pressure
+                        Adafruit_BME280::SAMPLING_X1, // humidity
+                        Adafruit_BME280::FILTER_OFF   );
+
 
     pinMode(PIN_SONIC_TRIG, OUTPUT);
     pinMode(PIN_SONIC_ECHO, INPUT);
