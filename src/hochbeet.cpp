@@ -3,12 +3,20 @@
  *
  *
  */
+/**
+*   I2C
+*   BME 280 Adresse :       0x76 
+*   TOFL Adresse    :       0x29    (Pololu VL6180X)
+*/
 
 #include <Arduino.h>
 #include <lmic.h>
 #include <hal/hal.h>
 #include <SPI.h>
 #include <DHT.h>
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
 
 // declaring functions
 void onEvent(ev_t ev);
@@ -24,16 +32,26 @@ void pumpeStop();
 #include "config.h"
 
 static osjob_t sendjob;
-const unsigned TX_INTERVAL = 60 * 10;
+const unsigned TX_INTERVAL = 60 * 5;
+
+
+// Adafruit Feather M0
+const lmic_pinmap lmic_pins = {
+    .nss = 8,  
+    .rxtx = LMIC_UNUSED_PIN,
+    .rst = LMIC_UNUSED_PIN,
+    .dio = {3,6,LMIC_UNUSED_PIN},
+};
+
 
 // Pinmapping for Dragino Arduino shield
-const lmic_pinmap lmic_pins = {
+/*const lmic_pinmap lmic_pins = {
     .nss = 10,
     .rxtx = LMIC_UNUSED_PIN,
     .rst = 9,
     .dio = {2, 6, 7},
 };
-
+*/
 // Pinmapping for LSN50 ??
 /* 
 const lmic_pinmap lmic_pins = {
@@ -48,13 +66,12 @@ const lmic_pinmap lmic_pins = {
 // Pins und Sensoren
 //***************************
 DHT dht;
+Adafruit_BME280 bme;
 #define PIN_DHT 5
-//#define PIN_SONIC_TRIG 3
-//#define PIN_SONIC_ECHO 4
-
 #define LevelSensor_01 3
 #define PIN_RELAY 11
-
+#define PIN_SONIC_TRIG 12
+#define PIN_SONIC_ECHO 13
 //***************************
 // LMIC Events
 //***************************
@@ -170,12 +187,12 @@ void do_send(osjob_t *j)
         // DHT Read
         //****************
         Serial.println(F("DHT wait"));
-        delay(dht.getMinimumSamplingPeriod());
+      //  delay(dht.getMinimumSamplingPeriod());
         Serial.println(F("DHT read"));
-        float hum = dht.getHumidity();
+        float hum =  bme.readHumidity();
         int hum_int = hum * 100;
-        float temp = dht.getTemperature();
-        int temp_int = temp * 100;
+        float temp = bme.readTemperature();
+        int temp_int = (temp+50) * 100;
         Serial.print(hum);
         Serial.print("\t");
         Serial.print(temp);
@@ -184,7 +201,7 @@ void do_send(osjob_t *j)
         //****************
         // Sonic Read
         //****************
-        int distance = sonic();
+        int distance = 12;//sonic();
 
         //****************
         // Payload
@@ -211,32 +228,56 @@ void setup()
 {
    // Serial.begin(115200);
     Serial.begin(9600);
+    delay(10000);
     Serial.println(F("Starting"));
 
     //***********************
     // Pins und Sensoren
     //***********************
-    dht.setup(PIN_DHT);
+    //dht.setup(PIN_DHT);
 
-   // pinMode(PIN_SONIC_TRIG, OUTPUT);
-   // pinMode(PIN_SONIC_ECHO, INPUT);
+    pinMode(PIN_SONIC_TRIG, OUTPUT);
+    pinMode(PIN_SONIC_ECHO, INPUT);
     pinMode(PIN_RELAY, OUTPUT);
     pinMode(LevelSensor_01,INPUT);
+
+  //***********************
+  // BME280
+  //***********************
+  
+  if (!bme.begin()) {  
+    Serial.println("Could not find a valid BMP280 sensor, check wiring!");
+    while (1);
+  }
+
+
     //***********************
     // LMIC
     //***********************
-
-    /* 
+    //Start Kai
+     os_init();
+    // Reset the MAC state. Session and pending data transfers will be discarded.
+    LMIC_reset();
+    LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100);
+    //StartKai Ende
+    
+    //Start Mathias
+    /*
     os_init();
     LMIC_reset();
     LMIC.dn2Dr = DR_SF9;
     LMIC_setDrTxpow(DR_SF7, 14);
+    */
+    //Start Mathias Ende
 
     // Start job (sending automatically starts OTAA too)
     do_send(&sendjob);
-*/
+
     setRelay(1);
-    attachInterrupt(digitalPinToInterrupt(LevelSensor_01), pumpeStop,HIGH);
+   // attachInterrupt(digitalPinToInterrupt(LevelSensor_01), pumpeStop,HIGH);
+
+  
+   
 }
 
 //***************************
@@ -244,8 +285,16 @@ void setup()
 //***************************
 void loop()
 {
-    // os_runloop_once();
-    if(digitalRead(LevelSensor_01)==0)
+     os_runloop_once();
+
+ /*      Serial.print("Temperature: ");
+    Serial.println(bme.readTemperature());
+
+    Serial.print("PressureAir: ");
+    
+    Serial.println(bme.readPressure()/100.0F);
+*/
+ /*   if(digitalRead(LevelSensor_01)==0)
     {
         //setRelay(0);    
          //Serial.println(analogRead(A3));
@@ -259,9 +308,17 @@ void loop()
         //delay(5000);
        // setRelay(0);
     }
-    
+    sonic();
        delay(1000);
-    
+    Serial.println(F("DHT wait"));
+    delay(dht.getMinimumSamplingPeriod());
+    Serial.println(F("DHT read"));
+    Serial.print("Hum: "); 
+    Serial.println(dht.getHumidity());
+  //      int hum_int = hum * 100;
+    Serial.print("Temp: "); 
+    Serial.println(dht.getTemperature()); 
+   */ 
 }
 
 void pumpeStop(){
@@ -279,7 +336,7 @@ void setRelay(int state)
 //***************************
 // Read sonic distance
 //***************************
-/*
+
 int sonic()
 {
     delay(300);
@@ -317,4 +374,3 @@ int sonic()
 
     return distance;
 }
-*/
