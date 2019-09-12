@@ -17,6 +17,9 @@
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
+#include <Wire.h>
+#include <VL6180X.h>
+
 
 // declaring functions
 void onEvent(ev_t ev);
@@ -67,6 +70,8 @@ const lmic_pinmap lmic_pins = {
 //***************************
 DHT dht;
 Adafruit_BME280 bme;
+VL6180X s_vlx6180;
+
 #define PIN_DHT 5
 #define LevelSensor_01 3
 #define PIN_RELAY 11
@@ -240,7 +245,23 @@ void setup()
     pinMode(PIN_SONIC_ECHO, INPUT);
     pinMode(PIN_RELAY, OUTPUT);
     pinMode(LevelSensor_01,INPUT);
+// VL6180X
 
+  Wire.begin();
+
+  s_vlx6180.init();
+  s_vlx6180.configureDefault();
+ s_vlx6180.writeReg(VL6180X::SYSRANGE__MAX_CONVERGENCE_TIME, 30);
+  s_vlx6180.writeReg16Bit(VL6180X::SYSALS__INTEGRATION_PERIOD, 50);
+
+  s_vlx6180.setTimeout(500);
+
+   // stop continuous mode if already active
+  s_vlx6180.stopContinuous();
+    delay(300);
+  // start interleaved continuous mode with period of 100 ms
+  s_vlx6180.startInterleavedContinuous(100);
+ 
   //***********************
   // BME280
   //***********************
@@ -285,7 +306,15 @@ void setup()
 //***************************
 void loop()
 { 
-     os_runloop_once();
+   //  os_runloop_once();
+  Serial.print("Ambient: ");
+  Serial.print(s_vlx6180.readAmbientContinuous());
+  if (s_vlx6180.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
+  Serial.print("\tRange: ");
+  Serial.print(s_vlx6180.readRangeContinuousMillimeters());
+  if (s_vlx6180.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
+
+  Serial.println();
 
  /*      Serial.print("Temperature: ");
     Serial.println(bme.readTemperature());

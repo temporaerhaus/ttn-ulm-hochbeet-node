@@ -3,4 +3,4 @@
 CMakeListsPrivate.txt
 .idea
 cmake-build-debug
-config.h
+src/config.h
