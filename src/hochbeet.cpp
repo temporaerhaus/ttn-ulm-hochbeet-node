@@ -49,6 +49,12 @@ Adafruit_BME280 bme; // I2C, depending on your BME, you have to use address 0x77
 #define BME_ADDR 0x76 // use address 0x77 (default) or 0x76
 #define PIN_SONIC_TRIG 3
 #define PIN_SONIC_ECHO 4
+#define TENSIOMETER_PRESSURE_PIN A0
+
+const float VminTyp = 0.2f;
+const float VmaxTyp = 4.7f;
+const float VrangeTyp = VmaxTyp - VminTyp;
+const float maxPressure = 500.0f;
 
 
 //***************************
@@ -301,6 +307,24 @@ int sonic() {
 
     return distance;
 }
+
+float getTensiometerPressure() {
+    int rawValue = analogRead(TENSIOMETER_PRESSURE_PIN);  // read the input pin
+
+    // @todo auf 3V runterbrechen
+    float voltage = (float) rawValue * (5.0 / 1023.0);
+    voltage = (voltage < VminTyp) ? VminTyp : voltage;
+    Serial.print(rawValue);  
+    Serial.print(" / ");
+    Serial.print(voltage);
+    Serial.print(" V");
+    float pressure = 1.0 / VrangeTyp * (voltage - VminTyp) * maxPressure;
+    Serial.print (" / ");
+    Serial.println(" kPa");
+    Serial.print(pressure);
+    return pressure;
+}
+
 
 #ifdef RTC
 void alarmMatch() {
