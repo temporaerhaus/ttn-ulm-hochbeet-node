@@ -34,6 +34,8 @@ int sonic();
 void sleepForSeconds(int seconds);
 void setRelay(int state);
 void pumpeStop();
+void pumpeStop1();
+void releaseInt();  
 
 
 //***************************
@@ -76,23 +78,32 @@ const lmic_pinmap lmic_pins = {
 // Pins und Sensoren
 //***************************
 Adafruit_BME280 bme; // I2C, depending on your BME, you have to use address 0x77 (default) or 0x76, see below
-#define BME_ADDR 0x76 // use address 0x77 (default) or 0x76
-#define PIN_SONIC_TRIG 3
-#define PIN_SONIC_ECHO 4
+#define BME_ADDR 0x77 // use address 0x77 (default) or 0x76
 
+VL6180X s_vlx6180;  // I2C, Pololu VL6180X Time-of-Flight Distance Sensor adress 0x29
 
+//#define PIN_SONIC_TRIG 3
+//#define PIN_SONIC_ECHO 4
+
+/*
 #define TENSIOMETER_PRESSURE_PIN A0
 const float VminTyp = 0.2f;
 const float VmaxTyp = 4.7f;
 const float VrangeTyp = VmaxTyp - VminTyp;
 const float maxPressure = 500.0f;
+*/
 
-VL6180X s_vlx6180;
+// schauen ob man die Level Sensoren auch auf digitale Pins setzen kann
+#define ReleaseButton  17     //Buttton to reset Error
+#define LevelSensor_01 18    //Tank
+#define LevelSensor_02 19     //flowers
+boolean level=false;            
+boolean level2=false;  
 
-#define LevelSensor_01 3
+  
 #define PIN_RELAY 11
-#define PIN_SONIC_TRIG 12
-#define PIN_SONIC_ECHO 13
+//#define PIN_SONIC_TRIG 12
+//#define PIN_SONIC_ECHO 13
 //***************************
 // LMIC Events
 //***************************
@@ -259,6 +270,10 @@ void setup()
 {
    // Serial.begin(115200);
     Serial.begin(9600);
+     while (!Serial) {
+    ; // wait for serial port to connect. Needed for native USB
+    }
+    Serial.println(F("Starting before delay"));
     delay(10000);
     Serial.println(F("Starting"));
 
@@ -269,11 +284,13 @@ void setup()
         rtc.setDate(1, 1, (uint8_t)1970);
     #endif
 
+
     //***********************
     // Pins und Sensoren
     //***********************
     // Setup BME280
-    if (!bme.begin(BME280_ADDRESS)) {
+    //if (!bme.begin(BME280_ADDRESS)) {
+    if (!bme.begin()) {         
         Serial.println("Could not find a valid BME280 sensor, check wiring!");
         while (1);
     }
@@ -292,19 +309,19 @@ void setup()
                     Adafruit_BME280::FILTER_OFF   );
 
 
-    pinMode(PIN_SONIC_TRIG, OUTPUT);
-    pinMode(PIN_SONIC_ECHO, INPUT);
+    //pinMode(PIN_SONIC_TRIG, OUTPUT);
+   // pinMode(PIN_SONIC_ECHO, INPUT);
     pinMode(PIN_RELAY, OUTPUT);
-    pinMode(LevelSensor_01,INPUT);
+
 // VL6180X
 
   Wire.begin();
 
   s_vlx6180.init();
   s_vlx6180.configureDefault();
- s_vlx6180.writeReg(VL6180X::SYSRANGE__MAX_CONVERGENCE_TIME, 30);
+  s_vlx6180.writeReg(VL6180X::SYSRANGE__MAX_CONVERGENCE_TIME, 30);
   s_vlx6180.writeReg16Bit(VL6180X::SYSALS__INTEGRATION_PERIOD, 50);
-
+  //s_vlx6180.setScaling(1);
   s_vlx6180.setTimeout(500);
 
    // stop continuous mode if already active
@@ -317,20 +334,30 @@ void setup()
   // BME280
   //***********************
   
-  if (!bme.begin()) {  
-    Serial.println("Could not find a valid BMP280 sensor, check wiring!");
-    while (1);
-  }
+//  if (!bme.begin()) {  
+//    Serial.println("Could not find a valid BMP280 sensor, check wiring!");
+//    while (1);
+// }
+//Interrupts for Sensors
+
+pinMode(ReleaseButton,INPUT);
+pinMode(LevelSensor_01,INPUT);
+pinMode(LevelSensor_02,INPUT);
+attachInterrupt(digitalPinToInterrupt(ReleaseButton), releaseInt ,HIGH);
+attachInterrupt(digitalPinToInterrupt(LevelSensor_01), pumpeStop1,HIGH);
+attachInterrupt(digitalPinToInterrupt(LevelSensor_02), pumpeStop,HIGH);
+
+ 
 
 
     //***********************
     // LMIC
     //***********************
     //Start Kai
-     os_init();
+//     os_init();
     // Reset the MAC state. Session and pending data transfers will be discarded.
-    LMIC_reset();
-    LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100);
+//    LMIC_reset();
+//    LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100);
     //StartKai Ende
     
     //Start Mathias
@@ -343,7 +370,7 @@ void setup()
     //Start Mathias Ende
 
     // Start job (sending automatically starts OTAA too)
-    do_send(&sendjob);
+   // do_send(&sendjob);
 
     setRelay(1);
    // attachInterrupt(digitalPinToInterrupt(LevelSensor_01), pumpeStop,HIGH);
@@ -358,14 +385,20 @@ void setup()
 void loop()
 { 
    //  os_runloop_once();
+   
+  //Output Values s_vlx6180
   Serial.print("Ambient: ");
   Serial.print(s_vlx6180.readAmbientContinuous());
   if (s_vlx6180.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
   Serial.print("\tRange: ");
   Serial.print(s_vlx6180.readRangeContinuousMillimeters());
   if (s_vlx6180.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
-
   Serial.println();
+  #ifdef Test
+      Serial.print(F("TESTPRINT"));
+  #endif
+  delay(2000);
+  //sleepForSeconds(1) ;
 
  /*      Serial.print("Temperature: ");
     Serial.println(bme.readTemperature());
@@ -401,9 +434,6 @@ void loop()
    */ 
 }
 
-void pumpeStop(){
-    setRelay(0);
-}
 
 //***************************
 // set Relay state = 1 Relay on ; state=0 Relay off
@@ -416,7 +446,7 @@ void setRelay(int state)
 //***************************
 // Read sonic distance
 //***************************
-
+/*
 int sonic()
 {
     delay(300);
@@ -454,7 +484,8 @@ int sonic()
 
     return distance;
 }
-
+*/
+/*
 float getTensiometerPressure() {
     int rawValue = analogRead(TENSIOMETER_PRESSURE_PIN);  // read the input pin
 
@@ -471,7 +502,7 @@ float getTensiometerPressure() {
     Serial.print(pressure);
     return pressure;
 }
-
+*/
 
 #ifdef RTC
 void alarmMatch() {
@@ -517,6 +548,7 @@ void alarmSet(int alarmDelaySeconds) {
 
 #endif
 
+
 void sleepForSeconds(int seconds) {
     // Ensure all debugging messages are sent before sleep
     Serial.flush();
@@ -534,3 +566,20 @@ void sleepForSeconds(int seconds) {
         rtc.standbyMode();
     #endif
 }
+
+void pumpeStop(){
+    setRelay(0);
+    level=true;
+
+}
+void pumpeStop1(){
+    setRelay(0);
+    level2=true;
+
+}
+void releaseInt(){
+    level=false;
+    level2=false;
+    setRelay(1);
+}
+

@@ -1,5 +1,5 @@
 // lsb
-static const u1_t PROGMEM DEVEUI[8]= { };
+static const u1_t PROGMEM DEVEUI[8]= {  };
 void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);}
 
 // lsb
