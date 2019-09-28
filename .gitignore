@@ -5,3 +5,4 @@ CMakeListsPrivate.txt
 cmake-build-debug
 src/config.h
 src/config.h
+src/test.h
