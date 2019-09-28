@@ -95,8 +95,8 @@ const float maxPressure = 500.0f;
 
 // schauen ob man die Level Sensoren auch auf digitale Pins setzen kann
 #define ReleaseButton  17     //Buttton to reset Error
-#define LevelSensor_01 18    //Tank
-#define LevelSensor_02 19     //flowers
+#define LevelSensor_01 19    //Tank
+#define LevelSensor_02 12     //flowers
 boolean level=false;            
 boolean level2=false;  
 
