@@ -19,12 +19,20 @@
 #include <VL6180X.h>
 
 #ifdef LOW_POWER
-    #include "LowPower.h"
+#include "LowPower.h"
 #endif
 
 #ifdef RTC
-    #include <RTCZero.h>
-    RTCZero rtc;
+#include <RTCZero.h>
+RTCZero rtc;
+#endif
+
+#ifdef OLED
+#include <Adafruit_SSD1306.h>
+#define SCREEN_WIDTH 128 // Pixelanzahl in der Breite
+#define SCREEN_HEIGHT 64 // Pixelanzahl in der Hoehoe
+#define OLED_RESET 4     // wird wohl bei diesem Display nicht
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #endif
 
 // declaring functions
@@ -35,26 +43,25 @@ void sleepForSeconds(int seconds);
 void setRelay(int state);
 void pumpeStop();
 void pumpeStop1();
-void releaseInt();  
-
+void releaseInt();
+void writeDisplay();
 
 //***************************
 // TTN und LMIC
 //***************************
 #include "config.h"
+bool joined = false;
 
 static osjob_t sendjob;
-const unsigned TX_INTERVAL = 60 * 5;
-
+const unsigned TX_INTERVAL = 60 * 3;
 
 // Adafruit Feather M0
 const lmic_pinmap lmic_pins = {
-    .nss = 8,  
+    .nss = 8,
     .rxtx = LMIC_UNUSED_PIN,
     .rst = LMIC_UNUSED_PIN,
-    .dio = {3,6,LMIC_UNUSED_PIN},
+    .dio = {3, 6, LMIC_UNUSED_PIN},
 };
-
 
 // Pinmapping for Dragino Arduino shield
 /*const lmic_pinmap lmic_pins = {
@@ -77,10 +84,10 @@ const lmic_pinmap lmic_pins = {
 //***************************
 // Pins und Sensoren
 //***************************
-Adafruit_BME280 bme; // I2C, depending on your BME, you have to use address 0x77 (default) or 0x76, see below
+Adafruit_BME280 bme;  // I2C, depending on your BME, you have to use address 0x77 (default) or 0x76, see below
 #define BME_ADDR 0x77 // use address 0x77 (default) or 0x76
 
-VL6180X s_vlx6180;  // I2C, Pololu VL6180X Time-of-Flight Distance Sensor adress 0x29
+VL6180X s_vlx6180; // I2C, Pololu VL6180X Time-of-Flight Distance Sensor adress 0x29
 
 //#define PIN_SONIC_TRIG 3
 //#define PIN_SONIC_ECHO 4
@@ -93,17 +100,20 @@ const float VrangeTyp = VmaxTyp - VminTyp;
 const float maxPressure = 500.0f;
 */
 
-// schauen ob man die Level Sensoren auch auf digitale Pins setzen kann
-#define ReleaseButton  17     //Buttton to reset Error
-#define LevelSensor_01 19    //Tank
-#define LevelSensor_02 12     //flowers
-boolean level=false;            
-boolean level2=false;  
+// Water Level Sensors
+#define ReleaseButton 17  //Buttton to reset Error
+#define LevelSensor_01 10 //Tank
+#define LevelSensor_02 12 //flowers
+boolean level = false;
+boolean level2 = false;
 
-  
 #define PIN_RELAY 11
 //#define PIN_SONIC_TRIG 12
 //#define PIN_SONIC_ECHO 13
+
+//using foor LOOP
+unsigned long millisNow = 0;
+
 //***************************
 // LMIC Events
 //***************************
@@ -127,10 +137,12 @@ void onEvent(ev_t ev)
         break;
     case EV_JOINING:
         Serial.println(F("EV_JOINING"));
+        LMIC_setDrTxpow(DR_SF8, 14);
         break;
     case EV_JOINED:
         Serial.println(F("EV_JOINED"));
         {
+            joined = true;
             u4_t netid = 0;
             devaddr_t devaddr = 0;
             u1_t nwkKey[16];
@@ -229,7 +241,7 @@ void do_send(osjob_t *j)
         Serial.println(temp_int);
 
         // pressure
-        int pressure_int = round(bme.readPressure()/100);
+        int pressure_int = round(bme.readPressure() / 100);
         Serial.print("Pressure: ");
         Serial.println(pressure_int);
 
@@ -241,7 +253,12 @@ void do_send(osjob_t *j)
         //****************
         // Sonic Read
         //****************
-        int distance = 12;//sonic();
+        int distance = s_vlx6180.readRangeContinuousMillimeters(); //sonic();
+                                                                   //Serial.print(s_vlx6180.readRangeContinuousMillimeters());
+        if (s_vlx6180.timeoutOccurred())
+        {
+            distance = 255;
+        }
 
         //****************
         // Payload
@@ -252,7 +269,7 @@ void do_send(osjob_t *j)
         payload[1] = lowByte(hum_int);
         payload[2] = highByte(temp_int);
         payload[3] = lowByte(temp_int);
-        payload[4] = lowByte(pressure_int);
+        payload[4] = highByte(pressure_int);
         payload[5] = lowByte(pressure_int);
         // distance (could also be encoded in one byte for the hochbeet?)
         payload[6] = highByte(distance);
@@ -268,33 +285,41 @@ void do_send(osjob_t *j)
 //***************************
 void setup()
 {
-   // Serial.begin(115200);
+    // Serial.begin(115200);
     Serial.begin(9600);
-     while (!Serial) {
-    ; // wait for serial port to connect. Needed for native USB
-    }
-    Serial.println(F("Starting before delay"));
-    delay(10000);
+    delay(10000); //Backup Delay to transfer sketch
+
     Serial.println(F("Starting"));
 
-    #ifdef RTC
-        // configure RTC
-        rtc.begin();
-        rtc.setTime(0, 0, 0);
-        rtc.setDate(1, 1, (uint8_t)1970);
-    #endif
+#ifdef RTC
+    // configure RTC
+    rtc.begin();
+    rtc.setTime(0, 0, 0);
+    rtc.setDate(1, 1, (uint8_t)1970);
+#endif
 
+#ifdef OLED
+    display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+    display.clearDisplay();
+    display.setCursor(2, 0);
+    display.setTextColor(WHITE);
+    display.setTextSize(2);
+    display.print("Booting");
+    display.display();
+    delay(1000);
+#endif
 
     //***********************
     // Pins und Sensoren
     //***********************
     // Setup BME280
-    //if (!bme.begin(BME280_ADDRESS)) {
-    if (!bme.begin()) {         
+    //if (!bme.begin(BME280_ADDRESS)) {   <-- hat bei mir nicht richtig funktioniert (richtige Adresse war gesetzt ;) )
+    if (!bme.begin())
+    {
         Serial.println("Could not find a valid BME280 sensor, check wiring!");
-        while (1);
+        while (1)
+            ;
     }
-        
 
     // Set BME in force mode to reduce power consumption
     // force mode = measure, store results, and go into sleep mode
@@ -306,87 +331,114 @@ void setup()
                     Adafruit_BME280::SAMPLING_X1, // temperature
                     Adafruit_BME280::SAMPLING_X1, // pressure
                     Adafruit_BME280::SAMPLING_X1, // humidity
-                    Adafruit_BME280::FILTER_OFF   );
-
+                    Adafruit_BME280::FILTER_OFF);
 
     //pinMode(PIN_SONIC_TRIG, OUTPUT);
-   // pinMode(PIN_SONIC_ECHO, INPUT);
+    //pinMode(PIN_SONIC_ECHO, INPUT);
     pinMode(PIN_RELAY, OUTPUT);
 
-// VL6180X
+    //***********************
+    // VL6180X
+    //***********************
 
-  Wire.begin();
-
-  s_vlx6180.init();
-  s_vlx6180.configureDefault();
-  s_vlx6180.writeReg(VL6180X::SYSRANGE__MAX_CONVERGENCE_TIME, 30);
-  s_vlx6180.writeReg16Bit(VL6180X::SYSALS__INTEGRATION_PERIOD, 50);
-  //s_vlx6180.setScaling(1);
-  s_vlx6180.setTimeout(500);
-
-   // stop continuous mode if already active
-  s_vlx6180.stopContinuous();
+    Wire.begin();
+    s_vlx6180.init();
+    s_vlx6180.configureDefault();
+    s_vlx6180.writeReg(VL6180X::SYSRANGE__MAX_CONVERGENCE_TIME, 30);
+    s_vlx6180.writeReg16Bit(VL6180X::SYSALS__INTEGRATION_PERIOD, 50);
+    //s_vlx6180.setScaling(1);
+    s_vlx6180.setTimeout(500);
+    // stop continuous mode if already active
+    s_vlx6180.stopContinuous();
     delay(300);
-  // start interleaved continuous mode with period of 100 ms
-  s_vlx6180.startInterleavedContinuous(100);
- 
-  //***********************
-  // BME280
-  //***********************
-  
-//  if (!bme.begin()) {  
-//    Serial.println("Could not find a valid BMP280 sensor, check wiring!");
-//    while (1);
-// }
-//Interrupts for Sensors
+    // start interleaved continuous mode with period of 100 ms
+    s_vlx6180.startInterleavedContinuous(100);
 
-pinMode(ReleaseButton,INPUT);
-pinMode(LevelSensor_01,INPUT);
-pinMode(LevelSensor_02,INPUT);
-attachInterrupt(digitalPinToInterrupt(ReleaseButton), releaseInt ,HIGH);
-attachInterrupt(digitalPinToInterrupt(LevelSensor_01), pumpeStop1,HIGH);
-attachInterrupt(digitalPinToInterrupt(LevelSensor_02), pumpeStop,HIGH);
+    //***********************
+    //Interrupts for Sensors
+    //***********************
+    pinMode(ReleaseButton, INPUT);
+    pinMode(LevelSensor_01, INPUT);
+    pinMode(LevelSensor_02, INPUT);
+    attachInterrupt(digitalPinToInterrupt(ReleaseButton), releaseInt, HIGH);
+    attachInterrupt(digitalPinToInterrupt(LevelSensor_01), pumpeStop1, HIGH);
+    attachInterrupt(digitalPinToInterrupt(LevelSensor_02), pumpeStop, HIGH);
 
- 
-
+    //***********************
+    //write data to Display before TTN Join
+    //***********************
+#ifdef OLED
+    writeDisplay();
+#endif
 
     //***********************
     // LMIC
     //***********************
-    //Start Kai
-//     os_init();
-    // Reset the MAC state. Session and pending data transfers will be discarded.
-//    LMIC_reset();
-//    LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100);
-    //StartKai Ende
-    
-    //Start Mathias
-    /*
     os_init();
+    // Reset the MAC state. Session and pending data transfers will be discarded.
     LMIC_reset();
-    LMIC.dn2Dr = DR_SF9;
-    LMIC_setDrTxpow(DR_SF7, 14);
-    */
-    //Start Mathias Ende
+    LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100);
+    do_send(&sendjob);
 
-    // Start job (sending automatically starts OTAA too)
-   // do_send(&sendjob);
-
+    //Testing LED ON (remove if Pump is connected )
     setRelay(1);
-   // attachInterrupt(digitalPinToInterrupt(LevelSensor_01), pumpeStop,HIGH);
-
-  
-   
 }
 
 //***************************
 // Loop
 //***************************
+
+unsigned long millisWriteDisplay = 0;
+unsigned long millisSentTTN = 0;
 void loop()
-{ 
-   //  os_runloop_once();
-   
-  //Output Values s_vlx6180
+{
+
+    if (joined == false) // joined hin und wieder true obwohl noch gar nicht joined ??
+    {
+#ifdef OLED
+        display.clearDisplay();
+        display.setCursor(2, 0);
+        display.setTextColor(WHITE);
+        display.setTextSize(2);
+        display.print("Join TTN");
+        display.display();
+#endif
+        os_runloop_once();
+    }
+    else
+    {
+        //***********************
+        //schreibt alle 10 Sekunden die aktuellen Werte auf das Display
+        //***********************
+        //Problem with millis all 50days because reset to 0. Will it working if we use  rtc ??
+        if (millis() - millisWriteDisplay > 10000)
+        {
+            millisWriteDisplay = millis();
+#ifdef OLED
+            writeDisplay();
+#endif
+        }
+
+        if (millis() - millisSentTTN > 1000 * 1)
+        {
+            millisSentTTN = millis();
+#ifdef OLED
+   /*         display.clearDisplay();
+            display.setCursor(2, 0);
+            display.setTextColor(WHITE);
+            display.setTextSize(2);
+            display.print("send TTN");
+            display.display();
+            */
+#endif
+          //  os_runloop_once();
+           //do_send(&sendjob);
+        }
+    }
+    //  os_runloop_once();
+
+    //Output Values s_vlx6180
+    /*
   Serial.print("Ambient: ");
   Serial.print(s_vlx6180.readAmbientContinuous());
   if (s_vlx6180.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
@@ -394,47 +446,51 @@ void loop()
   Serial.print(s_vlx6180.readRangeContinuousMillimeters());
   if (s_vlx6180.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
   Serial.println();
-  #ifdef Test
-      Serial.print(F("TESTPRINT"));
-  #endif
-  delay(2000);
-  //sleepForSeconds(1) ;
-
- /*      Serial.print("Temperature: ");
-    Serial.println(bme.readTemperature());
-
-    Serial.print("PressureAir: ");
-    
-    Serial.println(bme.readPressure()/100.0F);
 */
- /*   if(digitalRead(LevelSensor_01)==0)
-    {
-        //setRelay(0);    
-         //Serial.println(analogRead(A3));
-         Serial.println(digitalRead(LevelSensor_01));
-         setRelay(1);
-
-    }else{
-        Serial.println(digitalRead(LevelSensor_01));
-        // Serial.println(analogRead());
-       // setRelay(1);
-        //delay(5000);
-       // setRelay(0);
-    }
-    sonic();
-       delay(1000);
-    Serial.println(F("DHT wait"));
-    delay(dht.getMinimumSamplingPeriod());
-    Serial.println(F("DHT read"));
-    Serial.print("Hum: "); 
-    Serial.println(dht.getHumidity());
-  //      int hum_int = hum * 100;
-    Serial.print("Temp: "); 
-    Serial.println(dht.getTemperature()); 
-   */ 
+os_runloop_once();
 }
 
-
+#ifdef OLED
+void writeDisplay()
+{
+    int range = 0;
+    display.clearDisplay();
+    display.setCursor(1, 0);
+    display.setTextColor(WHITE);
+    //display.setCursor(25,1);
+    display.setTextSize(1);
+    display.print("Distance: ");
+    for (int i = 0; i < 10; i++)
+    {
+        range += s_vlx6180.readRangeContinuousMillimeters();
+    }
+    range = range / 10;
+    display.print(range);
+    display.println(" mm");
+    display.print("Sonic : ");
+    display.print("N/A");
+    display.println(" mm");
+    display.print("Temp: ");
+    display.print(bme.readTemperature());
+    display.println(" C");
+    display.print("Pressure: ");
+    display.print(bme.readPressure() / 100.0F);
+    display.println(" p");
+    display.print("Hum: ");
+    display.print(bme.readHumidity());
+    display.println(" p");
+    display.print("Level: ");
+    display.print(level);
+    display.println(" ");
+    display.print("Level2: ");
+    display.print(level2);
+    display.println(" ");
+    display.print("Teniso: ");
+    display.print("N/A");
+    display.println(" ");
+    display.display();
+}
+#endif
 //***************************
 // set Relay state = 1 Relay on ; state=0 Relay off
 //***************************
@@ -505,81 +561,85 @@ float getTensiometerPressure() {
 */
 
 #ifdef RTC
-void alarmMatch() {
-    #ifdef DEBUG
-      SerialUSB.print(F("alarmMatch() Woke up.\n"));
-    #endif
+void alarmMatch()
+{
+#ifdef DEBUG
+    SerialUSB.print(F("alarmMatch() Woke up.\n"));
+#endif
 
     rtc.detachInterrupt();
 }
 
-void alarmSet(int alarmDelaySeconds) {
+void alarmSet(int alarmDelaySeconds)
+{
     int alarmTimeSeconds = rtc.getSeconds();
     int alarmTimeMinutes = rtc.getMinutes();
 
-    alarmTimeMinutes = (alarmTimeMinutes + ( alarmDelaySeconds / 60 )) % 60;
-    alarmTimeSeconds = (alarmTimeSeconds + ( alarmDelaySeconds % 60 )) % 60;
+    alarmTimeMinutes = (alarmTimeMinutes + (alarmDelaySeconds / 60)) % 60;
+    alarmTimeSeconds = (alarmTimeSeconds + (alarmDelaySeconds % 60)) % 60;
 
-    #ifdef DEBUG
-      Serial.print(F("Setting next alarm timer:\n  (rtc.getMinutes / rtc.getSeconds / alarmDelaySeconds / alarmTimeMinutes / alarmTimeSeconds)\n  "));
-      Serial.print(rtc.getMinutes());
-      Serial.print(" / ");
-      Serial.print(rtc.getSeconds());
-      Serial.print(" / ");
-      Serial.print(alarmDelaySeconds);
-      Serial.print(" / ");
-      Serial.print(alarmTimeMinutes);
-      Serial.print(" / ");
-      Serial.print(alarmTimeMinutes);
-      Serial.print("\n");
-    #endif
+#ifdef DEBUG
+    Serial.print(F("Setting next alarm timer:\n  (rtc.getMinutes / rtc.getSeconds / alarmDelaySeconds / alarmTimeMinutes / alarmTimeSeconds)\n  "));
+    Serial.print(rtc.getMinutes());
+    Serial.print(" / ");
+    Serial.print(rtc.getSeconds());
+    Serial.print(" / ");
+    Serial.print(alarmDelaySeconds);
+    Serial.print(" / ");
+    Serial.print(alarmTimeMinutes);
+    Serial.print(" / ");
+    Serial.print(alarmTimeMinutes);
+    Serial.print("\n");
+#endif
 
     rtc.setAlarmSeconds(alarmTimeSeconds);
     rtc.setAlarmMinutes(alarmTimeMinutes);
     rtc.enableAlarm(rtc.MATCH_MMSS);
     rtc.attachInterrupt(alarmMatch);
 
-    #ifdef DEBUG
-      SerialUSB.println("alarmSet() complete") ;
-    #endif
+#ifdef DEBUG
+    SerialUSB.println("alarmSet() complete");
+#endif
 }
-
-
 
 #endif
 
-
-void sleepForSeconds(int seconds) {
+void sleepForSeconds(int seconds)
+{
     // Ensure all debugging messages are sent before sleep
     Serial.flush();
-    
-    #ifdef LOW_POWER
-        // Going into sleep for more than 8 s – any better idea?
-        int sleepCycles = round(seconds / 8) ;
-        for(int i = 0; i < sleepCycles; i++) {
-              LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
-        }
-    #endif
 
-    #ifdef RTC
-        alarmSet(seconds);
-        rtc.standbyMode();
-    #endif
+#ifdef LOW_POWER
+    // Going into sleep for more than 8 s – any better idea?
+    int sleepCycles = round(seconds / 8);
+    for (int i = 0; i < sleepCycles; i++)
+    {
+        LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
+    }
+#endif
+
+#ifdef RTC
+    alarmSet(seconds);
+    rtc.standbyMode();
+#endif
 }
 
-void pumpeStop(){
+void pumpeStop()
+{
     setRelay(0);
-    level=true;
-
+    level = true;
 }
-void pumpeStop1(){
+void pumpeStop1()
+{
     setRelay(0);
-    level2=true;
-
+    level2 = true;
 }
-void releaseInt(){
-    level=false;
-    level2=false;
+void releaseInt()
+{
+    level = false;
+    level2 = false;
+#ifdef OLED
+    writeDisplay();
+#endif
     setRelay(1);
 }
-
