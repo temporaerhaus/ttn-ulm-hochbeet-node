@@ -53,7 +53,7 @@ void writeDisplay();
 bool joined = false;
 
 static osjob_t sendjob;
-const unsigned TX_INTERVAL = 60 * 3;
+const unsigned TX_INTERVAL = 60 * 5;
 
 // Adafruit Feather M0
 const lmic_pinmap lmic_pins = {
@@ -360,9 +360,9 @@ void setup()
     pinMode(ReleaseButton, INPUT);
     pinMode(LevelSensor_01, INPUT);
     pinMode(LevelSensor_02, INPUT);
-    attachInterrupt(digitalPinToInterrupt(ReleaseButton), releaseInt, HIGH);
-    attachInterrupt(digitalPinToInterrupt(LevelSensor_01), pumpeStop1, HIGH);
-    attachInterrupt(digitalPinToInterrupt(LevelSensor_02), pumpeStop, HIGH);
+ //   attachInterrupt(digitalPinToInterrupt(ReleaseButton), releaseInt, HIGH);
+ //   attachInterrupt(digitalPinToInterrupt(LevelSensor_01), pumpeStop1, HIGH);
+ //   attachInterrupt(digitalPinToInterrupt(LevelSensor_02), pumpeStop, HIGH);
 
     //***********************
     //write data to Display before TTN Join
