@@ -22,9 +22,9 @@
 #include "LowPower.h"
 #endif
 
-#ifdef RTC
+#ifdef RTCI
 #include <RTCZero.h>
-RTCZero rtc;
+RTCZero rtc1;
 #endif
 
 #ifdef OLED
@@ -45,6 +45,8 @@ void pumpeStop();
 void pumpeStop1();
 void releaseInt();
 void writeDisplay();
+void readSensors();
+void printdigit(int number);
 
 //***************************
 // TTN und LMIC
@@ -53,7 +55,7 @@ void writeDisplay();
 bool joined = false;
 
 static osjob_t sendjob;
-const unsigned TX_INTERVAL = 60 * 5;
+const unsigned TX_INTERVAL = 150;
 
 // Adafruit Feather M0
 const lmic_pinmap lmic_pins = {
@@ -101,11 +103,10 @@ const float maxPressure = 500.0f;
 */
 
 // Water Level Sensors
-#define ReleaseButton 17  //Buttton to reset Error
-#define LevelSensor_01 10 //Tank
-#define LevelSensor_02 12 //flowers
-boolean level = false;
-boolean level2 = false;
+#define PIN_RELEASE_BUTTON 17  //Buttton to reset Error
+#define PIN_WATER_TANK_EMPTY 13 //Tank (A4)
+#define PIN_FLOWER_POT_FULL 12 //flowers
+
 
 #define PIN_RELAY 11
 //#define PIN_SONIC_TRIG 12
@@ -113,7 +114,16 @@ boolean level2 = false;
 
 //using foor LOOP
 unsigned long millisNow = 0;
-
+int Irrigation_Interval=1;      //  Hours
+int Irrigation_Duration=1;      //  Minutes
+int Time_Last_Pump_Start=0;     //  ?? Value
+int Time_Last_Irrigation=0;
+int Time_Last_Send=0;
+int Dam_Halt=0;
+int TENSIOMETER_PRESSURE=0;
+int TENSIOMETER_PRESSURE_Min=0;
+boolean Water_Tank_Empty = true;
+boolean Flower_Pot_Full = true;
 //***************************
 // LMIC Events
 //***************************
@@ -291,11 +301,13 @@ void setup()
 
     Serial.println(F("Starting"));
 
-#ifdef RTC
+#ifdef RTCI
     // configure RTC
-    rtc.begin();
-    rtc.setTime(0, 0, 0);
-    rtc.setDate(1, 1, (uint8_t)1970);
+    rtc1.begin();
+    rtc1.setTime(14, 4, 30);
+    rtc1.setDate(6, 10, (uint8_t)70);
+    rtc1.setYear(19);
+    
 #endif
 
 #ifdef OLED
@@ -357,12 +369,12 @@ void setup()
     //***********************
     //Interrupts for Sensors
     //***********************
-    pinMode(ReleaseButton, INPUT);
-    pinMode(LevelSensor_01, INPUT);
-    pinMode(LevelSensor_02, INPUT);
- //   attachInterrupt(digitalPinToInterrupt(ReleaseButton), releaseInt, HIGH);
- //   attachInterrupt(digitalPinToInterrupt(LevelSensor_01), pumpeStop1, HIGH);
- //   attachInterrupt(digitalPinToInterrupt(LevelSensor_02), pumpeStop, HIGH);
+    pinMode(PIN_RELEASE_BUTTON, INPUT);
+    pinMode(PIN_WATER_TANK_EMPTY, INPUT);
+    pinMode(PIN_FLOWER_POT_FULL, INPUT);
+    attachInterrupt(digitalPinToInterrupt(PIN_RELEASE_BUTTON), releaseInt, HIGH);
+    //attachInterrupt(digitalPinToInterrupt(PIN_WATER_TANK_EMPTY), pumpeStop1, HIGH);
+  //  attachInterrupt(digitalPinToInterrupt(PIN_FLOWER_POT_FULL), pumpeStop, HIGH);
 
     //***********************
     //write data to Display before TTN Join
@@ -374,14 +386,18 @@ void setup()
     //***********************
     // LMIC
     //***********************
+#ifdef TTN
+
     os_init();
     // Reset the MAC state. Session and pending data transfers will be discarded.
     LMIC_reset();
     LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100);
     do_send(&sendjob);
+#endif
 
     //Testing LED ON (remove if Pump is connected )
     setRelay(1);
+    digitalWrite(LED_BUILTIN, LOW);
 }
 
 //***************************
@@ -390,9 +406,11 @@ void setup()
 
 unsigned long millisWriteDisplay = 0;
 unsigned long millisSentTTN = 0;
+int seconds = 0;
 void loop()
 {
-
+//writeDisplay();
+#ifdef TTN
     if (joined == false) // joined hin und wieder true obwohl noch gar nicht joined ??
     {
 #ifdef OLED
@@ -407,6 +425,7 @@ void loop()
     }
     else
     {
+#endif
         //***********************
         //schreibt alle 10 Sekunden die aktuellen Werte auf das Display
         //***********************
@@ -417,13 +436,14 @@ void loop()
 #ifdef OLED
             writeDisplay();
 #endif
+            readSensors();
         }
 
         if (millis() - millisSentTTN > 1000 * 1)
         {
             millisSentTTN = millis();
 #ifdef OLED
-   /*         display.clearDisplay();
+            /*         display.clearDisplay();
             display.setCursor(2, 0);
             display.setTextColor(WHITE);
             display.setTextSize(2);
@@ -431,25 +451,100 @@ void loop()
             display.display();
             */
 #endif
-          //  os_runloop_once();
-           //do_send(&sendjob);
+            //  os_runloop_once();
+            //do_send(&sendjob);
         }
+
+#ifdef TTN
     }
+#endif
     //  os_runloop_once();
 
-    //Output Values s_vlx6180
-    /*
-  Serial.print("Ambient: ");
-  Serial.print(s_vlx6180.readAmbientContinuous());
-  if (s_vlx6180.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
-  Serial.print("\tRange: ");
-  Serial.print(s_vlx6180.readRangeContinuousMillimeters());
-  if (s_vlx6180.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
-  Serial.println();
-*/
-os_runloop_once();
-}
+ //playing with RTC
+ /*
+    if ((seconds   < rtc1.getSeconds()) || (seconds >= 59))
+    {
 
+        if ((seconds != 59) || (rtc1.getSeconds() == 0))
+        {
+            seconds = rtc1.getSeconds()+10;
+            readSensors();
+            //Serial.print(rtc1.getHours());
+            //Serial.print(" : ");
+            //Serial.print(rtc1.getMinutes());
+            //Serial.print(" : ");
+            //Serial.print(rtc1.getSeconds());
+            //Serial.println(" : ");
+        }
+        seconds = rtc1.getSeconds()+10;
+          sleepForSeconds(5);
+    }
+        */
+            //seconds = rtc1.getSeconds()+10;
+         
+        //  sleepForSeconds((rtc1.getSeconds() +5)%60);
+          
+    //alarmSet(5);
+  
+//readSensors();
+#ifdef TTN
+    os_runloop_once();
+#endif
+}
+void readSensors()
+{
+    //BME
+    bme.takeForcedMeasurement();
+    float temp = bme.readTemperature();
+    // pressure
+    float pressure = bme.readPressure() / 100;
+    // humidity
+    float hum = bme.readHumidity() ;
+    //TOFL
+    int distance = s_vlx6180.readRangeContinuousMillimeters(); 
+      if (s_vlx6180.timeoutOccurred())
+    {
+        distance = 255;
+    }
+    //Water_Tank_Empty Sensors
+    Water_Tank_Empty   = digitalRead(PIN_WATER_TANK_EMPTY);
+    Flower_Pot_Full  = digitalRead(PIN_FLOWER_POT_FULL);
+  
+    printdigit(rtc1.getDay());
+    Serial.print(".");
+    printdigit(rtc1.getMonth());
+    Serial.print(".");
+    printdigit(rtc1.getYear());
+    Serial.print("-");
+    printdigit(rtc1.getHours());
+    Serial.print(":");
+    printdigit(rtc1.getMinutes());
+    Serial.print(":");
+   printdigit(rtc1.getSeconds());
+    Serial.print("\t");
+
+    Serial.print("Temp: ");
+    Serial.print(temp);
+    Serial.print("\tPressure: ");
+    Serial.print(pressure);
+    Serial.print("\tHumidity: ");
+    Serial.print(hum);
+    Serial.print("\tWater_Empty : ");
+    Serial.print(Water_Tank_Empty);
+    Serial.print("\tFlower Full: ");
+    Serial.print(Flower_Pot_Full);
+    Serial.print("\tDistance: ");
+    Serial.println(distance);
+   
+}
+void printdigit(int number){
+    
+    if (number<10){
+        Serial.print('0');
+    }
+    Serial.print(number);
+
+}
 #ifdef OLED
 void writeDisplay()
 {
@@ -479,16 +574,26 @@ void writeDisplay()
     display.print("Hum: ");
     display.print(bme.readHumidity());
     display.println(" p");
-    display.print("Level: ");
-    display.print(level);
+    display.print("Water_Tank_Empty: ");
+    display.print(Water_Tank_Empty);
     display.println(" ");
-    display.print("Level2: ");
-    display.print(level2);
+    display.print("Flower_Pot_Full: ");
+    display.print(Flower_Pot_Full);
     display.println(" ");
     display.print("Teniso: ");
-    display.print("N/A");
+    display.print("N/A  ");
+    display.print(rtc1.getSeconds());
     display.println(" ");
     display.display();
+    /*
+  Serial.print("Ambient: ");
+  Serial.print(s_vlx6180.readAmbientContinuous());
+  if (s_vlx6180.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
+  Serial.print("\tRange: ");
+  Serial.print(s_vlx6180.readRangeContinuousMillimeters());
+  if (s_vlx6180.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
+  Serial.println();
+*/
 }
 #endif
 //***************************
@@ -560,29 +665,30 @@ float getTensiometerPressure() {
 }
 */
 
-#ifdef RTC
+#ifdef RTCI
 void alarmMatch()
 {
 #ifdef DEBUG
-    SerialUSB.print(F("alarmMatch() Woke up.\n"));
+    Serial.print(F("alarmMatch() Woke up.\n"));
 #endif
 
-    rtc.detachInterrupt();
+    rtc1.detachInterrupt();
+    
 }
 
 void alarmSet(int alarmDelaySeconds)
 {
-    int alarmTimeSeconds = rtc.getSeconds();
-    int alarmTimeMinutes = rtc.getMinutes();
+    int alarmTimeSeconds = rtc1.getSeconds();
+    int alarmTimeMinutes = rtc1.getMinutes();
 
     alarmTimeMinutes = (alarmTimeMinutes + (alarmDelaySeconds / 60)) % 60;
     alarmTimeSeconds = (alarmTimeSeconds + (alarmDelaySeconds % 60)) % 60;
 
 #ifdef DEBUG
-    Serial.print(F("Setting next alarm timer:\n  (rtc.getMinutes / rtc.getSeconds / alarmDelaySeconds / alarmTimeMinutes / alarmTimeSeconds)\n  "));
-    Serial.print(rtc.getMinutes());
+    Serial.print("Setting next alarm timer:\n  (rtc1.getMinutes / rtc1.getSeconds / alarmDelaySeconds / alarmTimeMinutes / alarmTimeSeconds)\n  ");
+    Serial.print(rtc1.getMinutes());
     Serial.print(" / ");
-    Serial.print(rtc.getSeconds());
+    Serial.print(rtc1.getSeconds());
     Serial.print(" / ");
     Serial.print(alarmDelaySeconds);
     Serial.print(" / ");
@@ -592,13 +698,14 @@ void alarmSet(int alarmDelaySeconds)
     Serial.print("\n");
 #endif
 
-    rtc.setAlarmSeconds(alarmTimeSeconds);
-    rtc.setAlarmMinutes(alarmTimeMinutes);
-    rtc.enableAlarm(rtc.MATCH_MMSS);
-    rtc.attachInterrupt(alarmMatch);
+    rtc1.setAlarmSeconds(alarmTimeSeconds);
+    rtc1.setAlarmMinutes(alarmTimeMinutes);
+    rtc1.enableAlarm(rtc1.MATCH_SS);
+    
+    rtc1.attachInterrupt(alarmMatch);
 
 #ifdef DEBUG
-    SerialUSB.println("alarmSet() complete");
+    Serial.println("alarmSet() complete");
 #endif
 }
 
@@ -618,26 +725,29 @@ void sleepForSeconds(int seconds)
     }
 #endif
 
-#ifdef RTC
+#ifdef RTCI
     alarmSet(seconds);
-    rtc.standbyMode();
+    Serial.end();
+ 
+    rtc1.standbyMode();
+ 
 #endif
 }
 
 void pumpeStop()
 {
     setRelay(0);
-    level = true;
+    Water_Tank_Empty = true;
 }
 void pumpeStop1()
 {
     setRelay(0);
-    level2 = true;
+    Flower_Pot_Full = true;
 }
 void releaseInt()
 {
-    level = false;
-    level2 = false;
+    Water_Tank_Empty = false;
+    Flower_Pot_Full = false;
 #ifdef OLED
     writeDisplay();
 #endif
