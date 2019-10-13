@@ -46,7 +46,8 @@ void pumpeStop1();
 void releaseInt();
 void writeDisplay();
 void readSensors();
-void printdigit(int number);
+void printdigit(int number); 
+
 
 //***************************
 // TTN und LMIC
