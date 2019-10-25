@@ -8,6 +8,13 @@
 *   BME 280 Adresse :       0x76 
 *   TOFL Adresse    :       0x29    (Pololu VL6180X)
 */
+/*
+*   Testboard Pins  Tensiometer Eingang A1
+*   Schwimmer 1 D11
+*   Schwimmer 2 D12
+*   Taster D13 //Wiederstand??
+*   Relay OUT   A5 D?????
+*/
 
 #include <Arduino.h>
 #include <lmic.h>
@@ -47,7 +54,7 @@ void releaseInt();
 void writeDisplay();
 void readSensors();
 void printdigit(int number); 
-
+float getTensiometerPressure();
 
 //***************************
 // TTN und LMIC
@@ -103,13 +110,29 @@ const float VrangeTyp = VmaxTyp - VminTyp;
 const float maxPressure = 500.0f;
 */
 
+/*
+*   Testboard Pins  Tensiometer Eingang A1
+*   Schwimmer 1 D11
+*   Schwimmer 2 D12
+*   Taster D13 //Wiederstand??
+*   Relay OUT   A5 D?????
+*/
+
+#define TENSIOMETER_PRESSURE_PIN A1
+const float VminTyp = 0.2f;
+const float VmaxTyp = 4.7f;
+const float VrangeTyp = VmaxTyp - VminTyp;
+const float maxPressure = 500.0f;
+
+
+
 // Water Level Sensors
-#define PIN_RELEASE_BUTTON 17  //Buttton to reset Error
-#define PIN_WATER_TANK_EMPTY 13 //Tank (A4)
+#define PIN_RELEASE_BUTTON 13  //Buttton to reset Error
+#define PIN_WATER_TANK_EMPTY 11 //Tank (A4)
 #define PIN_FLOWER_POT_FULL 12 //flowers
 
 
-#define PIN_RELAY 11
+#define PIN_RELAY 19
 //#define PIN_SONIC_TRIG 12
 //#define PIN_SONIC_ECHO 13
 
@@ -373,7 +396,7 @@ void setup()
     pinMode(PIN_RELEASE_BUTTON, INPUT);
     pinMode(PIN_WATER_TANK_EMPTY, INPUT);
     pinMode(PIN_FLOWER_POT_FULL, INPUT);
-    attachInterrupt(digitalPinToInterrupt(PIN_RELEASE_BUTTON), releaseInt, HIGH);
+ //   attachInterrupt(digitalPinToInterrupt(PIN_RELEASE_BUTTON), releaseInt, HIGH);
     //attachInterrupt(digitalPinToInterrupt(PIN_WATER_TANK_EMPTY), pumpeStop1, HIGH);
   //  attachInterrupt(digitalPinToInterrupt(PIN_FLOWER_POT_FULL), pumpeStop, HIGH);
 
@@ -491,6 +514,10 @@ void loop()
 #ifdef TTN
     os_runloop_once();
 #endif
+#ifdef OLED
+            readSensors();
+            writeDisplay();
+#endif
 }
 void readSensors()
 {
@@ -536,6 +563,7 @@ void readSensors()
     Serial.print(Flower_Pot_Full);
     Serial.print("\tDistance: ");
     Serial.println(distance);
+    float tensio= getTensiometerPressure();
    
 }
 void printdigit(int number){
@@ -550,6 +578,7 @@ void printdigit(int number){
 void writeDisplay()
 {
     int range = 0;
+    float tensio= getTensiometerPressure();
     display.clearDisplay();
     display.setCursor(1, 0);
     display.setTextColor(WHITE);
@@ -582,7 +611,7 @@ void writeDisplay()
     display.print(Flower_Pot_Full);
     display.println(" ");
     display.print("Teniso: ");
-    display.print("N/A  ");
+    display.print(tensio);
     display.print(rtc1.getSeconds());
     display.println(" ");
     display.display();
@@ -647,7 +676,7 @@ int sonic()
     return distance;
 }
 */
-/*
+
 float getTensiometerPressure() {
     int rawValue = analogRead(TENSIOMETER_PRESSURE_PIN);  // read the input pin
 
@@ -662,9 +691,10 @@ float getTensiometerPressure() {
     Serial.print (" / ");
     Serial.println(" kPa");
     Serial.print(pressure);
+    Serial.println (" ");
     return pressure;
 }
-*/
+
 
 #ifdef RTCI
 void alarmMatch()
