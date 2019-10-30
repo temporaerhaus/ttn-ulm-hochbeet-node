@@ -48,13 +48,15 @@ void do_send(osjob_t *j);
 int sonic();
 void sleepForSeconds(int seconds);
 void setRelay(int state);
+void pumpeStart();
 void pumpeStop();
-void pumpeStop1();
 void releaseInt();
 void writeDisplay();
 void readSensors();
+void readBME();
+void readTensiometerPressure();
 void printdigit(int number); 
-float getTensiometerPressure();
+
 
 //***************************
 // TTN und LMIC
@@ -136,6 +138,11 @@ const float maxPressure = 500.0f;
 //#define PIN_SONIC_TRIG 12
 //#define PIN_SONIC_ECHO 13
 
+
+//***************************
+// Vars
+//***************************
+
 //using foor LOOP
 unsigned long millisNow = 0;
 int Irrigation_Interval=1;      //  Hours
@@ -144,10 +151,15 @@ int Time_Last_Pump_Start=0;     //  ?? Value
 int Time_Last_Irrigation=0;
 int Time_Last_Send=0;
 int Dam_Halt=0;
-int TENSIOMETER_PRESSURE=0;
-int TENSIOMETER_PRESSURE_Min=0;
+float TENSIOMETER_PRESSURE=0;
+float TENSIOMETER_PRESSURE_Min=0;
 boolean Water_Tank_Empty = true;
 boolean Flower_Pot_Full = true;
+float temp;
+float hum;
+float pressure;
+int Water_Tank_Level;
+
 //***************************
 // LMIC Events
 //***************************
@@ -331,7 +343,6 @@ void setup()
     rtc1.setTime(14, 4, 30);
     rtc1.setDate(6, 10, (uint8_t)70);
     rtc1.setYear(19);
-    
 #endif
 
 #ifdef OLED
@@ -519,25 +530,50 @@ void loop()
             writeDisplay();
 #endif
 }
-void readSensors()
-{
+
+/**
+ * Rads temperature, pressure, and humidity
+ * from BME
+ */
+void readBME() {
     //BME
     bme.takeForcedMeasurement();
-    float temp = bme.readTemperature();
+    temp = bme.readTemperature();
     // pressure
-    float pressure = bme.readPressure() / 100;
+    pressure = bme.readPressure() / 100;
     // humidity
-    float hum = bme.readHumidity() ;
-    //TOFL
-    int distance = s_vlx6180.readRangeContinuousMillimeters(); 
+    hum = bme.readHumidity() ;
+}
+
+/**
+ * Reads the internal water level of the
+ * tensiometer
+ */
+void readToF() {
+    //ToF
+    Water_Tank_Level = s_vlx6180.readRangeContinuousMillimeters(); 
       if (s_vlx6180.timeoutOccurred())
     {
-        distance = 255;
+        Water_Tank_Level = 255;
     }
-    //Water_Tank_Empty Sensors
-    Water_Tank_Empty   = digitalRead(PIN_WATER_TANK_EMPTY);
+}
+
+/**
+ * Checks if the water tank is empty
+ */
+void readIfWaterTankEmpy() {
+    Water_Tank_Empty  = digitalRead(PIN_WATER_TANK_EMPTY);
+}
+
+/**
+ * Checks if the water level has reached the upper
+ * level of the flower pot
+ */
+void readIfFlowerPutFull() {
     Flower_Pot_Full  = digitalRead(PIN_FLOWER_POT_FULL);
-  
+}
+
+void printRTC() {
     printdigit(rtc1.getDay());
     Serial.print(".");
     printdigit(rtc1.getMonth());
@@ -548,24 +584,19 @@ void readSensors()
     Serial.print(":");
     printdigit(rtc1.getMinutes());
     Serial.print(":");
-   printdigit(rtc1.getSeconds());
+    printdigit(rtc1.getSeconds());
     Serial.print("\t");
-
-    Serial.print("Temp: ");
-    Serial.print(temp);
-    Serial.print("\tPressure: ");
-    Serial.print(pressure);
-    Serial.print("\tHumidity: ");
-    Serial.print(hum);
-    Serial.print("\tWater_Empty : ");
-    Serial.print(Water_Tank_Empty);
-    Serial.print("\tFlower Full: ");
-    Serial.print(Flower_Pot_Full);
-    Serial.print("\tDistance: ");
-    Serial.println(distance);
-    float tensio= getTensiometerPressure();
-   
 }
+
+void readSensors()
+{
+    readBME();
+    readToF();
+    readIfWaterTankEmpy();
+    readIfFlowerPutFull();
+    readTensiometerPressure();
+}
+
 void printdigit(int number){
     
     if (number<10){
@@ -575,10 +606,8 @@ void printdigit(int number){
 
 }
 #ifdef OLED
-void writeDisplay()
-{
+void writeDisplay() {
     int range = 0;
-    float tensio= getTensiometerPressure();
     display.clearDisplay();
     display.setCursor(1, 0);
     display.setTextColor(WHITE);
@@ -596,13 +625,13 @@ void writeDisplay()
     display.print("N/A");
     display.println(" mm");
     display.print("Temp: ");
-    display.print(bme.readTemperature());
+    display.print(temp);
     display.println(" C");
     display.print("Pressure: ");
-    display.print(bme.readPressure() / 100.0F);
+    display.print(pressure / 100.0F);
     display.println(" p");
     display.print("Hum: ");
-    display.print(bme.readHumidity());
+    display.print(hum);
     display.println(" p");
     display.print("Water_Tank_Empty: ");
     display.print(Water_Tank_Empty);
@@ -611,7 +640,7 @@ void writeDisplay()
     display.print(Flower_Pot_Full);
     display.println(" ");
     display.print("Teniso: ");
-    display.print(tensio);
+    display.print(TENSIOMETER_PRESSURE);
     display.print(rtc1.getSeconds());
     display.println(" ");
     display.display();
@@ -626,14 +655,147 @@ void writeDisplay()
 */
 }
 #endif
+
 //***************************
 // set Relay state = 1 Relay on ; state=0 Relay off
 //***************************
-void setRelay(int state)
-{
+void setRelay(int state) {
     digitalWrite(PIN_RELAY, state);
-    //:return state;
 }
+
+/**
+ * Reads to inner pressure of the tensiometer which
+ * indicates how moist the soil is. 
+ */
+void readTensiometerPressure() {
+    int rawValue = analogRead(TENSIOMETER_PRESSURE_PIN);  // read the input pin
+
+    // @todo auf 3V runterbrechen
+    float voltage = (float) rawValue * (5.0 / 1023.0);
+    voltage = (voltage < VminTyp) ? VminTyp : voltage;
+    TENSIOMETER_PRESSURE = 1.0 / VrangeTyp * (voltage - VminTyp) * maxPressure;
+
+    #ifdef DEBUG
+        Serial.print(rawValue);  
+        Serial.print(" / ");
+        Serial.print(voltage);
+        Serial.print(" V");
+        Serial.print (" / ");
+        Serial.println(" kPa");
+        Serial.print(pressure);
+        Serial.println (" ");
+    #endif
+}
+
+
+#ifdef RTCI
+/**
+ * Called after MCU is waked up by RTC alarm.
+ * 
+ */
+void alarmMatch() {
+#ifdef DEBUG
+    Serial.print(F("alarmMatch() Woke up.\n"));
+#endif
+
+    rtc1.detachInterrupt();
+    
+}
+
+/**
+ * Sets alarm to wake up the MCU after specific
+ * amout of seconds. Works only with RTC.
+ */
+void alarmSet(int alarmDelaySeconds) {
+    int alarmTimeSeconds = rtc1.getSeconds();
+    int alarmTimeMinutes = rtc1.getMinutes();
+
+    alarmTimeMinutes = (alarmTimeMinutes + (alarmDelaySeconds / 60)) % 60;
+    alarmTimeSeconds = (alarmTimeSeconds + (alarmDelaySeconds % 60)) % 60;
+
+#ifdef DEBUG
+    Serial.print("Setting next alarm timer:\n  (rtc1.getMinutes / rtc1.getSeconds / alarmDelaySeconds / alarmTimeMinutes / alarmTimeSeconds)\n  ");
+    Serial.print(rtc1.getMinutes());
+    Serial.print(" / ");
+    Serial.print(rtc1.getSeconds());
+    Serial.print(" / ");
+    Serial.print(alarmDelaySeconds);
+    Serial.print(" / ");
+    Serial.print(alarmTimeMinutes);
+    Serial.print(" / ");
+    Serial.print(alarmTimeMinutes);
+    Serial.print("\n");
+#endif
+
+    rtc1.setAlarmSeconds(alarmTimeSeconds);
+    rtc1.setAlarmMinutes(alarmTimeMinutes);
+    rtc1.enableAlarm(rtc1.MATCH_SS);
+    
+    rtc1.attachInterrupt(alarmMatch);
+
+#ifdef DEBUG
+    Serial.println("alarmSet() complete");
+#endif
+}
+
+#endif
+
+
+/**
+ * Powers down node for <seconds> s.
+ */
+void sleepForSeconds(int seconds) {
+    // Ensure all debugging messages are sent before sleep
+    Serial.flush();
+
+    // @todo kann eigentlich weg, oder?
+#ifdef LOW_POWER
+    // Going into sleep for more than 8 s – any better idea?
+    int sleepCycles = round(seconds / 8);
+    for (int i = 0; i < sleepCycles; i++)
+    {
+        LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
+    }
+#endif
+
+#ifdef RTCI
+    alarmSet(seconds);
+    Serial.end();
+ 
+    rtc1.standbyMode();
+ 
+#endif
+}
+
+/**
+ * Starts the pump to pump water into the plant.
+ */
+void pumpeStart() {
+    setRelay(1);
+}
+
+/**
+ * Stops the pump.
+ */
+void pumpeStop() {
+    setRelay(0);
+}
+
+
+////////////////////////
+////////////////////////
+////////////////////////
+
+void releaseInt()
+{
+    Water_Tank_Empty = false;
+    Flower_Pot_Full = false;
+#ifdef OLED
+    writeDisplay();
+#endif
+    setRelay(1);
+}
+
 //***************************
 // Read sonic distance
 //***************************
@@ -676,111 +838,3 @@ int sonic()
     return distance;
 }
 */
-
-float getTensiometerPressure() {
-    int rawValue = analogRead(TENSIOMETER_PRESSURE_PIN);  // read the input pin
-
-    // @todo auf 3V runterbrechen
-    float voltage = (float) rawValue * (5.0 / 1023.0);
-    voltage = (voltage < VminTyp) ? VminTyp : voltage;
-    Serial.print(rawValue);  
-    Serial.print(" / ");
-    Serial.print(voltage);
-    Serial.print(" V");
-    float pressure = 1.0 / VrangeTyp * (voltage - VminTyp) * maxPressure;
-    Serial.print (" / ");
-    Serial.println(" kPa");
-    Serial.print(pressure);
-    Serial.println (" ");
-    return pressure;
-}
-
-
-#ifdef RTCI
-void alarmMatch()
-{
-#ifdef DEBUG
-    Serial.print(F("alarmMatch() Woke up.\n"));
-#endif
-
-    rtc1.detachInterrupt();
-    
-}
-
-void alarmSet(int alarmDelaySeconds)
-{
-    int alarmTimeSeconds = rtc1.getSeconds();
-    int alarmTimeMinutes = rtc1.getMinutes();
-
-    alarmTimeMinutes = (alarmTimeMinutes + (alarmDelaySeconds / 60)) % 60;
-    alarmTimeSeconds = (alarmTimeSeconds + (alarmDelaySeconds % 60)) % 60;
-
-#ifdef DEBUG
-    Serial.print("Setting next alarm timer:\n  (rtc1.getMinutes / rtc1.getSeconds / alarmDelaySeconds / alarmTimeMinutes / alarmTimeSeconds)\n  ");
-    Serial.print(rtc1.getMinutes());
-    Serial.print(" / ");
-    Serial.print(rtc1.getSeconds());
-    Serial.print(" / ");
-    Serial.print(alarmDelaySeconds);
-    Serial.print(" / ");
-    Serial.print(alarmTimeMinutes);
-    Serial.print(" / ");
-    Serial.print(alarmTimeMinutes);
-    Serial.print("\n");
-#endif
-
-    rtc1.setAlarmSeconds(alarmTimeSeconds);
-    rtc1.setAlarmMinutes(alarmTimeMinutes);
-    rtc1.enableAlarm(rtc1.MATCH_SS);
-    
-    rtc1.attachInterrupt(alarmMatch);
-
-#ifdef DEBUG
-    Serial.println("alarmSet() complete");
-#endif
-}
-
-#endif
-
-void sleepForSeconds(int seconds)
-{
-    // Ensure all debugging messages are sent before sleep
-    Serial.flush();
-
-#ifdef LOW_POWER
-    // Going into sleep for more than 8 s – any better idea?
-    int sleepCycles = round(seconds / 8);
-    for (int i = 0; i < sleepCycles; i++)
-    {
-        LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
-    }
-#endif
-
-#ifdef RTCI
-    alarmSet(seconds);
-    Serial.end();
- 
-    rtc1.standbyMode();
- 
-#endif
-}
-
-void pumpeStop()
-{
-    setRelay(0);
-    Water_Tank_Empty = true;
-}
-void pumpeStop1()
-{
-    setRelay(0);
-    Flower_Pot_Full = true;
-}
-void releaseInt()
-{
-    Water_Tank_Empty = false;
-    Flower_Pot_Full = false;
-#ifdef OLED
-    writeDisplay();
-#endif
-    setRelay(1);
-}
