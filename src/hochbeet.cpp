@@ -55,8 +55,7 @@ void writeDisplay();
 void readSensors();
 void readBME();
 void readTensiometerPressure();
-void printdigit(int number); 
-
+void printdigit(int number);
 
 //***************************
 // TTN und LMIC
@@ -126,39 +125,44 @@ const float VmaxTyp = 4.7f;
 const float VrangeTyp = VmaxTyp - VminTyp;
 const float maxPressure = 500.0f;
 
-
-
 // Water Level Sensors
-#define PIN_RELEASE_BUTTON 13  //Buttton to reset Error
+#define PIN_RELEASE_BUTTON 13   //Buttton to reset Error
 #define PIN_WATER_TANK_EMPTY 11 //Tank (A4)
-#define PIN_FLOWER_POT_FULL 12 //flowers
-
+#define PIN_FLOWER_POT_FULL 12  //flowers
 
 #define PIN_RELAY 19
 //#define PIN_SONIC_TRIG 12
 //#define PIN_SONIC_ECHO 13
-
 
 //***************************
 // Vars
 //***************************
 
 //using foor LOOP
-unsigned long millisNow = 0;
-int Irrigation_Interval=1;      //  Hours
-int Irrigation_Duration=1;      //  Minutes
-int Time_Last_Pump_Start=0;     //  ?? Value
-int Time_Last_Irrigation=0;
-int Time_Last_Send=0;
-int Dam_Halt=0;
-float TENSIOMETER_PRESSURE=0;
-float TENSIOMETER_PRESSURE_Min=0;
+uint32_t millisNow = 0;
+uint32_t Irrigation_Interval = 30; //* 60 * 60  //  Hours
+uint32_t Irrigation_Duration = 5; // *60  //  Minutes
+uint32_t Time_Last_Pump_Start = 0; //  ?? Value
+uint32_t Time_Last_Irrigation = 0;
+uint32_t Time_Last_Send = 0;
+int Dam_Halt = 0;
+float TENSIOMETER_PRESSURE = 0;
+float TENSIOMETER_PRESSURE_Min = 0;
 boolean Water_Tank_Empty = true;
 boolean Flower_Pot_Full = true;
 float temp;
 float hum;
 float pressure;
 int Water_Tank_Level;
+
+enum STATES
+{
+    PumpeAus,
+    PumpeAn,
+    Standby,
+    Error
+};
+byte state = PumpeAus;
 
 //***************************
 // LMIC Events
@@ -331,6 +335,7 @@ void do_send(osjob_t *j)
 //***************************
 void setup()
 {
+
     // Serial.begin(115200);
     Serial.begin(9600);
     delay(10000); //Backup Delay to transfer sketch
@@ -343,6 +348,10 @@ void setup()
     rtc1.setTime(14, 4, 30);
     rtc1.setDate(6, 10, (uint8_t)70);
     rtc1.setYear(19);
+
+#endif
+#ifdef DEBUG
+    Serial.println(rtc1.getEpoch());
 #endif
 
 #ifdef OLED
@@ -407,9 +416,9 @@ void setup()
     pinMode(PIN_RELEASE_BUTTON, INPUT);
     pinMode(PIN_WATER_TANK_EMPTY, INPUT);
     pinMode(PIN_FLOWER_POT_FULL, INPUT);
- //   attachInterrupt(digitalPinToInterrupt(PIN_RELEASE_BUTTON), releaseInt, HIGH);
+    //   attachInterrupt(digitalPinToInterrupt(PIN_RELEASE_BUTTON), releaseInt, HIGH);
     //attachInterrupt(digitalPinToInterrupt(PIN_WATER_TANK_EMPTY), pumpeStop1, HIGH);
-  //  attachInterrupt(digitalPinToInterrupt(PIN_FLOWER_POT_FULL), pumpeStop, HIGH);
+    //  attachInterrupt(digitalPinToInterrupt(PIN_FLOWER_POT_FULL), pumpeStop, HIGH);
 
     //***********************
     //write data to Display before TTN Join
@@ -433,17 +442,107 @@ void setup()
     //Testing LED ON (remove if Pump is connected )
     setRelay(1);
     digitalWrite(LED_BUILTIN, LOW);
+    state = Standby;
 }
 
 //***************************
 // Loop
 //***************************
 
-unsigned long millisWriteDisplay = 0;
-unsigned long millisSentTTN = 0;
+uint32_t secondsWriteDisplay = 0;
+uint32_t millisSentTTN = 0;
 int seconds = 0;
+uint32_t lastWrite=0;
+uint32_t currentTimestamp =0;
 void loop()
 {
+    //delay(5000);
+  //  Serial.println(rtc1.getEpoch());
+    currentTimestamp = rtc1.getEpoch();
+    
+    if ((currentTimestamp - lastWrite > 2)){
+        lastWrite = currentTimestamp;
+        writeDisplay();
+    }
+    switch (state)
+    {
+    case PumpeAus:
+        state=Standby;
+        break;
+
+    case PumpeAn:
+         if (millis() -millisNow>5000){
+         millisNow=millis();
+             Serial.print("Current State: PumpeAn (");
+             Serial.print((millis() -millisNow);
+             Serial.println(" s)");
+     }
+        
+        if ((Flower_Pot_Full) || (Water_Tank_Empty) || (currentTimestamp - Time_Last_Pump_Start > Irrigation_Duration))
+        {
+            pumpeStop();
+            state = PumpeAus;
+            Serial.println("State: PumpeAn --> PumpeAus");
+            Time_Last_Irrigation = currentTimestamp;
+           // Time_Last_Pump_Start = currentTimestamp;
+        }
+         
+
+        break;
+    case Standby:
+       
+        if (currentTimestamp - secondsWriteDisplay > 10)
+        {
+            secondsWriteDisplay = currentTimestamp;
+#ifdef OLED
+            writeDisplay();
+#endif
+            readSensors();
+        }
+
+        if ((currentTimestamp - Time_Last_Irrigation > Irrigation_Interval) && (!Flower_Pot_Full) && (!Water_Tank_Empty))
+        {
+            pumpeStart();
+            state = PumpeAn;
+            Serial.println("State: PumpeAus --> PumpeAn");
+            break;
+        }
+      //  delay(1000);
+    /*    Serial.print("Flower Pot full: ");
+        Serial.println(Flower_Pot_Full);
+        Serial.print("Water Empty: ");
+        Serial.println(Water_Tank_Empty);
+        Serial.print("currentTimestamp - Time_Last_Irrigation ");
+        Serial.println(currentTimestamp - Time_Last_Irrigation);
+        Serial.print("Irrigation_Interval ");
+        Serial.println(Irrigation_Interval);
+      */
+     //  delay(2000);
+     if (millis() -millisNow>5000){
+         millisNow=millis();
+             Serial.print("Current State: Standby (");
+             Serial.print(currentTimestamp - Time_Last_Irrigation);
+             Serial.println(" s)");
+     }
+        break;
+    }
+
+    // TTN SEND
+    if((state==PumpeAn)){
+        /*
+            if (currentTimestamp - TimeStampLastSend > Sendeintervall)
+            {   
+                readSensors();
+                dosend ...
+            }
+
+        */
+    }else if (state==Standby)
+    {
+        //Code for sleep Mode
+    }
+    
+
 //writeDisplay();
 #ifdef TTN
     if (joined == false) // joined hin und wieder true obwohl noch gar nicht joined ??
@@ -461,24 +560,13 @@ void loop()
     else
     {
 #endif
-        //***********************
-        //schreibt alle 10 Sekunden die aktuellen Werte auf das Display
-        //***********************
-        //Problem with millis all 50days because reset to 0. Will it working if we use  rtc ??
-        if (millis() - millisWriteDisplay > 10000)
-        {
-            millisWriteDisplay = millis();
-#ifdef OLED
-            writeDisplay();
-#endif
-            readSensors();
-        }
 
-        if (millis() - millisSentTTN > 1000 * 1)
+        if (currentTimestamp - millisSentTTN > 1000 * 1)
         {
-            millisSentTTN = millis();
+            millisSentTTN = currentTimestamp;
 #ifdef OLED
-            /*         display.clearDisplay();
+            /* 
+            display.clearDisplay();
             display.setCursor(2, 0);
             display.setTextColor(WHITE);
             display.setTextSize(2);
@@ -495,64 +583,41 @@ void loop()
 #endif
     //  os_runloop_once();
 
- //playing with RTC
- /*
-    if ((seconds   < rtc1.getSeconds()) || (seconds >= 59))
-    {
-
-        if ((seconds != 59) || (rtc1.getSeconds() == 0))
-        {
-            seconds = rtc1.getSeconds()+10;
-            readSensors();
-            //Serial.print(rtc1.getHours());
-            //Serial.print(" : ");
-            //Serial.print(rtc1.getMinutes());
-            //Serial.print(" : ");
-            //Serial.print(rtc1.getSeconds());
-            //Serial.println(" : ");
-        }
-        seconds = rtc1.getSeconds()+10;
-          sleepForSeconds(5);
-    }
-        */
-            //seconds = rtc1.getSeconds()+10;
-         
-        //  sleepForSeconds((rtc1.getSeconds() +5)%60);
-          
-    //alarmSet(5);
-  
-//readSensors();
 #ifdef TTN
     os_runloop_once();
 #endif
+/*
 #ifdef OLED
-            readSensors();
-            writeDisplay();
+    readSensors();
+    writeDisplay();
 #endif
+*/
 }
 
 /**
- * Rads temperature, pressure, and humidity
+ * Reads temperature, pressure, and humidity
  * from BME
  */
-void readBME() {
+void readBME()
+{
     //BME
     bme.takeForcedMeasurement();
     temp = bme.readTemperature();
     // pressure
     pressure = bme.readPressure() / 100;
     // humidity
-    hum = bme.readHumidity() ;
+    hum = bme.readHumidity();
 }
 
 /**
  * Reads the internal water level of the
  * tensiometer
  */
-void readToF() {
+void readToF()
+{
     //ToF
-    Water_Tank_Level = s_vlx6180.readRangeContinuousMillimeters(); 
-      if (s_vlx6180.timeoutOccurred())
+    Water_Tank_Level = s_vlx6180.readRangeContinuousMillimeters();
+    if (s_vlx6180.timeoutOccurred())
     {
         Water_Tank_Level = 255;
     }
@@ -561,19 +626,22 @@ void readToF() {
 /**
  * Checks if the water tank is empty
  */
-void readIfWaterTankEmpy() {
-    Water_Tank_Empty  = digitalRead(PIN_WATER_TANK_EMPTY);
+void readIfWaterTankEmpy()
+{
+    Water_Tank_Empty = digitalRead(PIN_WATER_TANK_EMPTY);
 }
 
 /**
  * Checks if the water level has reached the upper
  * level of the flower pot
  */
-void readIfFlowerPutFull() {
-    Flower_Pot_Full  = digitalRead(PIN_FLOWER_POT_FULL);
+void readIfFlowerPutFull()
+{
+    Flower_Pot_Full = digitalRead(PIN_FLOWER_POT_FULL);
 }
 
-void printRTC() {
+void printRTC()
+{
     printdigit(rtc1.getDay());
     Serial.print(".");
     printdigit(rtc1.getMonth());
@@ -597,16 +665,18 @@ void readSensors()
     readTensiometerPressure();
 }
 
-void printdigit(int number){
-    
-    if (number<10){
+void printdigit(int number)
+{
+
+    if (number < 10)
+    {
         Serial.print('0');
     }
     Serial.print(number);
-
 }
 #ifdef OLED
-void writeDisplay() {
+void writeDisplay()
+{   readSensors();
     int range = 0;
     display.clearDisplay();
     display.setCursor(1, 0);
@@ -659,7 +729,8 @@ void writeDisplay() {
 //***************************
 // set Relay state = 1 Relay on ; state=0 Relay off
 //***************************
-void setRelay(int state) {
+void setRelay(int state)
+{
     digitalWrite(PIN_RELAY, state);
 }
 
@@ -667,46 +738,47 @@ void setRelay(int state) {
  * Reads to inner pressure of the tensiometer which
  * indicates how moist the soil is. 
  */
-void readTensiometerPressure() {
-    int rawValue = analogRead(TENSIOMETER_PRESSURE_PIN);  // read the input pin
+void readTensiometerPressure()
+{
+    int rawValue = analogRead(TENSIOMETER_PRESSURE_PIN); // read the input pin
 
     // @todo auf 3V runterbrechen
-    float voltage = (float) rawValue * (5.0 / 1023.0);
+    float voltage = (float)rawValue * (5.0 / 1023.0);
     voltage = (voltage < VminTyp) ? VminTyp : voltage;
     TENSIOMETER_PRESSURE = 1.0 / VrangeTyp * (voltage - VminTyp) * maxPressure;
 
-    #ifdef DEBUG
-        Serial.print(rawValue);  
-        Serial.print(" / ");
-        Serial.print(voltage);
-        Serial.print(" V");
-        Serial.print (" / ");
-        Serial.println(" kPa");
-        Serial.print(pressure);
-        Serial.println (" ");
-    #endif
+#ifdef DEBUG
+    Serial.print(rawValue);
+    Serial.print(" / ");
+    Serial.print(voltage);
+    Serial.print(" V");
+    Serial.print(" / ");
+    Serial.print(pressure);
+    Serial.print(" kPa  ");
+    Serial.println(" ");
+#endif
 }
-
 
 #ifdef RTCI
 /**
  * Called after MCU is waked up by RTC alarm.
  * 
  */
-void alarmMatch() {
+void alarmMatch()
+{
 #ifdef DEBUG
     Serial.print(F("alarmMatch() Woke up.\n"));
 #endif
 
     rtc1.detachInterrupt();
-    
 }
 
 /**
  * Sets alarm to wake up the MCU after specific
  * amout of seconds. Works only with RTC.
  */
-void alarmSet(int alarmDelaySeconds) {
+void alarmSet(int alarmDelaySeconds)
+{
     int alarmTimeSeconds = rtc1.getSeconds();
     int alarmTimeMinutes = rtc1.getMinutes();
 
@@ -730,7 +802,7 @@ void alarmSet(int alarmDelaySeconds) {
     rtc1.setAlarmSeconds(alarmTimeSeconds);
     rtc1.setAlarmMinutes(alarmTimeMinutes);
     rtc1.enableAlarm(rtc1.MATCH_SS);
-    
+
     rtc1.attachInterrupt(alarmMatch);
 
 #ifdef DEBUG
@@ -740,11 +812,11 @@ void alarmSet(int alarmDelaySeconds) {
 
 #endif
 
-
 /**
  * Powers down node for <seconds> s.
  */
-void sleepForSeconds(int seconds) {
+void sleepForSeconds(int seconds)
+{
     // Ensure all debugging messages are sent before sleep
     Serial.flush();
 
@@ -761,26 +833,29 @@ void sleepForSeconds(int seconds) {
 #ifdef RTCI
     alarmSet(seconds);
     Serial.end();
- 
+
     rtc1.standbyMode();
- 
+
 #endif
 }
 
 /**
  * Starts the pump to pump water into the plant.
  */
-void pumpeStart() {
+void pumpeStart()
+{
+    
     setRelay(1);
+    Time_Last_Pump_Start = currentTimestamp;
 }
 
 /**
  * Stops the pump.
  */
-void pumpeStop() {
+void pumpeStop()
+{
     setRelay(0);
 }
-
 
 ////////////////////////
 ////////////////////////
