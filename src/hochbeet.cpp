@@ -448,7 +448,7 @@ void loop()
          if (millis() -millisNow>5000){
          millisNow=millis();
              Serial.print("Current State: PumpeAn (");
-             Serial.print((millis() -millisNow);
+             Serial.print((millis() -millisNow));
              Serial.println(" s)");
      }
         
