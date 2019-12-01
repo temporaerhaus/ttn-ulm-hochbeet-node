@@ -29,9 +29,9 @@
 #include "LowPower.h"
 #endif
 
-#ifdef RTCI
+#ifdef RTC
 #include <RTCZero.h>
-RTCZero rtc1;
+RTCZero rtc;
 #endif
 
 #ifdef OLED
@@ -54,7 +54,8 @@ void releaseInt();
 void writeDisplay();
 void readSensors();
 void readBME();
-void readTensiometerPressure();
+float readTensiometerPressure();
+float readTensiometerInternalWaterLevel();
 void printdigit(int number);
 
 //***************************
@@ -129,6 +130,57 @@ float hum;
 float pressure;
 int Water_Tank_Level;
 
+typedef enum { 
+    READ_SENSORS,
+    SEND_DATA,
+    STANDBY,
+    PUMP_START,
+    PUMP_STOP,
+    NUM_STATES } state_t;
+
+typedef struct {
+    uint32_t            irrigationInterval, // in milliseconds
+                        irrigationDuration,
+                        irrigationPause,
+                        durationIrrigationPause,
+                        txInterval,
+                        defaultSleepTime;
+    float               tensiometerMinPressure;
+} hochbeet_config_t;
+
+typedef struct {
+    hochbeet_config_t   *config;
+    uint32_t            timeLastPumpStart,
+                        timeLastIrrigationStart;
+    float               temperature,
+                        humidity,
+                        airPressure,
+                        tensiometerPressure,
+                        tensiometerInternalWaterLevel;
+    uint32_t            timeLastDataSent;
+    boolean             waterTankEmpty = true;
+    boolean             flowerPotFull = false;
+} instance_data_t ;
+
+
+
+typedef state_t state_func_t( instance_data_t *data );
+
+state_t do_state_read_sensors( instance_data_t *data );
+state_t do_state_send_data( instance_data_t *data );
+state_t do_state_standby( instance_data_t *data );
+state_t do_state_pump_start( instance_data_t *data );
+state_t do_state_pump_stop( instance_data_t *data );
+
+
+state_func_t* const state_table[ NUM_STATES ] = {
+    do_state_read_sensors, do_state_send_data, do_state_standby, do_state_pump_start, do_state_pump_stop
+};
+
+state_t run_state( state_t cur_state, instance_data_t *data ) {
+    return state_table[ cur_state ]( data );
+};
+
 enum STATES
 {
     PumpeAus,
@@ -136,6 +188,105 @@ enum STATES
     Standby,
     Error
 };
+
+state_t do_state_read_sensors(instance_data_t *data) {
+    // BME 280
+    bme.takeForcedMeasurement();
+    data->temperature = bme.readTemperature();
+    data->humidity = bme.readHumidity();
+    data->airPressure = bme.readPressure();
+
+    // Water Tank @TODO validate correct assignment
+    data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? false : true;
+
+    // Flower Pot @TODO validate correct assignment
+    data->flowerPotFull  = digitalRead(PIN_FLOWER_POT_FULL)  == 1 ? false : true;
+
+
+    // Read tensiometer (soil moisture)
+    data->tensiometerPressure = readTensiometerPressure();
+    data->tensiometerInternalWaterLevel = readTensiometerInternalWaterLevel();
+
+    return run_state(SEND_DATA, data);
+}
+
+state_t do_state_send_data(instance_data_t *data) {
+    // TODO
+    data->timeLastDataSent = rtc.getEpoch();
+    return run_state(STANDBY, data);
+}
+
+state_t do_state_standby( instance_data_t *data ) {
+    while(true) {
+        if(rtc.getEpoch() > data->timeLastDataSent + data->config->txInterval) {
+            return run_state(READ_SENSORS, data);
+        }
+
+        if(data->waterTankEmpty
+            && rtc.getEpoch() > data->timeLastIrrigationStart + data->config->irrigationInterval
+            && data->tensiometerPressure <= data->config->tensiometerMinPressure) {
+            
+            return run_state(PUMP_START, data);
+        }
+
+        deepSleep(data->config->defaultSleepTime);
+    }
+}
+
+void deepSleep(uint32_t sleepTimeInMilliSeconds) {
+    rtc.setAlarmEpoch(rtc.getEpoch() + sleepTimeInMilliSeconds);
+    rtc.enableAlarm(rtc.MATCH_YYMMDDHHMMSS);
+    rtc.attachInterrupt(alarmMatch);
+    rtc.standbyMode();
+}
+
+state_t do_state_pump_start( instance_data_t *data ) {
+    // If starting a new irrigation, set start time (note: a single irrigation
+    // consists of multiple irrigation intervalls)
+    if(data->timeLastIrrigationStart == 0) {
+        data->timeLastIrrigationStart = rtc.getEpoch();
+    }
+
+    // Set start of current irrigation intervall
+    data->timeLastPumpStart = rtc.getEpoch();
+
+    pumpeStart();
+
+    while(true) {
+        // Water Tank @TODO validate correct assignment
+        data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? false : true;
+
+        // Flower Pot @TODO validate correct assignment
+        data->flowerPotFull  = digitalRead(PIN_FLOWER_POT_FULL)  == 1 ? false : true;
+
+        if( data->waterTankEmpty
+            || data->flowerPotFull
+            || rtc.getEpoch() > data->timeLastPumpStart + data->config->irrigationInterval) {
+                return run_state(PUMP_STOP, data);
+            }
+    }
+}
+
+state_t do_state_pump_stop ( instance_data_t *data ) {
+    pumpeStop();
+
+    while(true) {
+        // Irrigation complete or water tank empty (has to be checked first!)
+        if(data->waterTankEmpty
+            || rtc.getEpoch() > data->timeLastIrrigationStart + data->config->irrigationDuration) {
+                return run_state(STANDBY, data);
+        }
+
+        // Continue irrigation after pause
+        if(rtc.getEpoch() > data->timeLastPumpStart + data->config->irrigationInterval + data->config->irrigationPause
+            && rtc.getEpoch() < data->timeLastIrrigationStart + data->config->irrigationDuration) {
+                return run_state(PUMP_START, data);
+        }
+
+        deepSleep(data->config->defaultSleepTime);
+    }
+}
+
 byte state = PumpeAus;
 
 //***************************
@@ -211,10 +362,10 @@ void onEvent(ev_t ev)
             Serial.println(F(" bytes of payload"));
         }
 
-        sleepForSeconds(TX_INTERVAL);
+        //sleepForSeconds(TX_INTERVAL);
 
         // Schedule next transmission
-        os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
+        //os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
         break;
     case EV_LOST_TSYNC:
         Serial.println(F("EV_LOST_TSYNC"));
@@ -316,16 +467,16 @@ void setup()
 
     Serial.println(F("Starting"));
 
-#ifdef RTCI
+#ifdef RTC
     // configure RTC
-    rtc1.begin();
-    rtc1.setTime(14, 4, 30);
-    rtc1.setDate(6, 10, (uint8_t)70);
-    rtc1.setYear(19);
+    rtc.begin();
+    rtc.setTime(14, 4, 30);
+    rtc.setDate(6, 10, (uint8_t)70);
+    rtc.setYear(19);
 
 #endif
 #ifdef DEBUG
-    Serial.println(rtc1.getEpoch());
+    Serial.println(rtc.getEpoch());
 #endif
 
 #ifdef OLED
@@ -347,8 +498,7 @@ void setup()
     if (!bme.begin())
     {
         Serial.println("Could not find a valid BME280 sensor, check wiring!");
-        while (1)
-            ;
+        while (1) ;
     }
 
     // Set BME in force mode to reduce power consumption
@@ -374,15 +524,10 @@ void setup()
     Wire.begin();
     s_vlx6180.init();
     s_vlx6180.configureDefault();
-    s_vlx6180.writeReg(VL6180X::SYSRANGE__MAX_CONVERGENCE_TIME, 30);
-    s_vlx6180.writeReg16Bit(VL6180X::SYSALS__INTEGRATION_PERIOD, 50);
-    //s_vlx6180.setScaling(1);
     s_vlx6180.setTimeout(500);
     // stop continuous mode if already active
     s_vlx6180.stopContinuous();
-    delay(300);
-    // start interleaved continuous mode with period of 100 ms
-    s_vlx6180.startInterleavedContinuous(100);
+    delay(500);
 
     //***********************
     //Interrupts for Sensors
@@ -428,11 +573,16 @@ uint32_t millisSentTTN = 0;
 int seconds = 0;
 uint32_t lastWrite=0;
 uint32_t currentTimestamp =0;
-void loop()
+
+void loop() {
+
+}
+
+void loopOld()
 {
     //delay(5000);
-  //  Serial.println(rtc1.getEpoch());
-    currentTimestamp = rtc1.getEpoch();
+  //  Serial.println(rtc.getEpoch());
+    currentTimestamp = rtc.getEpoch();
     
     if ((currentTimestamp - lastWrite > 2)){
         lastWrite = currentTimestamp;
@@ -587,14 +737,28 @@ void readBME()
  * Reads the internal water level of the
  * tensiometer
  */
-void readToF()
+float readTensiometerInternalWaterLevel()
 {
-    //ToF
-    Water_Tank_Level = s_vlx6180.readRangeContinuousMillimeters();
-    if (s_vlx6180.timeoutOccurred())
+    s_vlx6180.startRangeContinuous();
+    u_int8_t numberOfSuccesfullMeasurements = 0;
+    float distance = 0.0f;
+
+    for (u_int8_t i = 0; i < 20; i++)
     {
-        Water_Tank_Level = 255;
+        float currentDistance = s_vlx6180.readRangeContinuousMillimeters();
+        if (!s_vlx6180.timeoutOccurred())
+        {
+            distance += currentDistance;
+            numberOfSuccesfullMeasurements += 1;
+        }
     }
+    
+    if (numberOfSuccesfullMeasurements > 0)
+    {
+        distance = distance/numberOfSuccesfullMeasurements;
+    }
+    
+    return distance;
 }
 
 /**
@@ -616,24 +780,24 @@ void readIfFlowerPutFull()
 
 void printRTC()
 {
-    printdigit(rtc1.getDay());
+    printdigit(rtc.getDay());
     Serial.print(".");
-    printdigit(rtc1.getMonth());
+    printdigit(rtc.getMonth());
     Serial.print(".");
-    printdigit(rtc1.getYear());
+    printdigit(rtc.getYear());
     Serial.print("-");
-    printdigit(rtc1.getHours());
+    printdigit(rtc.getHours());
     Serial.print(":");
-    printdigit(rtc1.getMinutes());
+    printdigit(rtc.getMinutes());
     Serial.print(":");
-    printdigit(rtc1.getSeconds());
+    printdigit(rtc.getSeconds());
     Serial.print("\t");
 }
 
 void readSensors()
 {
     readBME();
-    readToF();
+    readTensiometerInternalWaterLevel();
     readIfWaterTankEmpy();
     readIfFlowerPutFull();
     readTensiometerPressure();
@@ -685,7 +849,7 @@ void writeDisplay()
     display.println(" ");
     display.print("Teniso: ");
     display.print(TENSIOMETER_PRESSURE);
-    display.print(rtc1.getSeconds());
+    display.print(rtc.getSeconds());
     display.println(" ");
     display.display();
     /*
@@ -712,14 +876,14 @@ void setRelay(int state)
  * Reads to inner pressure of the tensiometer which
  * indicates how moist the soil is. 
  */
-void readTensiometerPressure()
+float readTensiometerPressure()
 {
     int rawValue = analogRead(TENSIOMETER_PRESSURE_PIN); // read the input pin
-
+    float tensiometerPressure;
     // @todo auf 3V runterbrechen
     float voltage = (float)rawValue * (5.0 / 1023.0);
     voltage = (voltage < VminTyp) ? VminTyp : voltage;
-    TENSIOMETER_PRESSURE = 1.0 / VrangeTyp * (voltage - VminTyp) * maxPressure;
+    tensiometerPressure = 1.0 / VrangeTyp * (voltage - VminTyp) * maxPressure;
 
 #ifdef DEBUG
     Serial.print(rawValue);
@@ -727,13 +891,14 @@ void readTensiometerPressure()
     Serial.print(voltage);
     Serial.print(" V");
     Serial.print(" / ");
-    Serial.print(pressure);
+    Serial.print(tensiometerPressure);
     Serial.print(" kPa  ");
     Serial.println(" ");
 #endif
+    return tensiometerPressure;
 }
 
-#ifdef RTCI
+#ifdef RTC
 /**
  * Called after MCU is waked up by RTC alarm.
  * 
@@ -744,7 +909,7 @@ void alarmMatch()
     Serial.print(F("alarmMatch() Woke up.\n"));
 #endif
 
-    rtc1.detachInterrupt();
+    rtc.detachInterrupt();
 }
 
 /**
@@ -753,17 +918,17 @@ void alarmMatch()
  */
 void alarmSet(int alarmDelaySeconds)
 {
-    int alarmTimeSeconds = rtc1.getSeconds();
-    int alarmTimeMinutes = rtc1.getMinutes();
+    int alarmTimeSeconds = rtc.getSeconds();
+    int alarmTimeMinutes = rtc.getMinutes();
 
     alarmTimeMinutes = (alarmTimeMinutes + (alarmDelaySeconds / 60)) % 60;
     alarmTimeSeconds = (alarmTimeSeconds + (alarmDelaySeconds % 60)) % 60;
 
 #ifdef DEBUG
-    Serial.print("Setting next alarm timer:\n  (rtc1.getMinutes / rtc1.getSeconds / alarmDelaySeconds / alarmTimeMinutes / alarmTimeSeconds)\n  ");
-    Serial.print(rtc1.getMinutes());
+    Serial.print("Setting next alarm timer:\n  (rtc.getMinutes / rtc.getSeconds / alarmDelaySeconds / alarmTimeMinutes / alarmTimeSeconds)\n  ");
+    Serial.print(rtc.getMinutes());
     Serial.print(" / ");
-    Serial.print(rtc1.getSeconds());
+    Serial.print(rtc.getSeconds());
     Serial.print(" / ");
     Serial.print(alarmDelaySeconds);
     Serial.print(" / ");
@@ -773,11 +938,11 @@ void alarmSet(int alarmDelaySeconds)
     Serial.print("\n");
 #endif
 
-    rtc1.setAlarmSeconds(alarmTimeSeconds);
-    rtc1.setAlarmMinutes(alarmTimeMinutes);
-    rtc1.enableAlarm(rtc1.MATCH_SS);
+    rtc.setAlarmSeconds(alarmTimeSeconds);
+    rtc.setAlarmMinutes(alarmTimeMinutes);
+    rtc.enableAlarm(rtc.MATCH_SS);
 
-    rtc1.attachInterrupt(alarmMatch);
+    rtc.attachInterrupt(alarmMatch);
 
 #ifdef DEBUG
     Serial.println("alarmSet() complete");
@@ -804,11 +969,11 @@ void sleepForSeconds(int seconds)
     }
 #endif
 
-#ifdef RTCI
+#ifdef RTC
     alarmSet(seconds);
     Serial.end();
 
-    rtc1.standbyMode();
+    rtc.standbyMode();
 
 #endif
 }
