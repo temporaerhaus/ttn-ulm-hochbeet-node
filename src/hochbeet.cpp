@@ -45,18 +45,15 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 // declaring functions
 void onEvent(ev_t ev);
 void do_send(osjob_t *j);
-int sonic();
 void sleepForSeconds(int seconds);
 void setRelay(int state);
 void pumpeStart();
 void pumpeStop();
-void releaseInt();
 void writeDisplay();
-void readSensors();
-void readBME();
 float readTensiometerPressure();
 float readTensiometerInternalWaterLevel();
 void printdigit(int number);
+void deepSleep(uint32_t sleepTimeInMilliSeconds);
 
 //***************************
 // TTN und LMIC
@@ -106,29 +103,6 @@ const float maxPressure = 500.0f;
 #define PIN_FLOWER_POT_FULL 12  //flowers
 
 #define PIN_RELAY 19
-//#define PIN_SONIC_TRIG 12
-//#define PIN_SONIC_ECHO 13
-
-//***************************
-// Vars
-//***************************
-
-//using foor LOOP
-uint32_t millisNow = 0;
-uint32_t Irrigation_Interval = 30; //* 60 * 60  //  Hours
-uint32_t Irrigation_Duration = 5; // *60  //  Minutes
-uint32_t Time_Last_Pump_Start = 0; //  ?? Value
-uint32_t Time_Last_Irrigation = 0;
-uint32_t Time_Last_Send = 0;
-int Dam_Halt = 0;
-float TENSIOMETER_PRESSURE = 0;
-float TENSIOMETER_PRESSURE_Min = 0;
-boolean Water_Tank_Empty = true;
-boolean Flower_Pot_Full = true;
-float temp;
-float hum;
-float pressure;
-int Water_Tank_Level;
 
 typedef enum { 
     READ_SENSORS,
@@ -233,13 +207,6 @@ state_t do_state_standby( instance_data_t *data ) {
     }
 }
 
-void deepSleep(uint32_t sleepTimeInMilliSeconds) {
-    rtc.setAlarmEpoch(rtc.getEpoch() + sleepTimeInMilliSeconds);
-    rtc.enableAlarm(rtc.MATCH_YYMMDDHHMMSS);
-    rtc.attachInterrupt(alarmMatch);
-    rtc.standbyMode();
-}
-
 state_t do_state_pump_start( instance_data_t *data ) {
     // If starting a new irrigation, set start time (note: a single irrigation
     // consists of multiple irrigation intervalls)
@@ -286,8 +253,6 @@ state_t do_state_pump_stop ( instance_data_t *data ) {
         deepSleep(data->config->defaultSleepTime);
     }
 }
-
-byte state = PumpeAus;
 
 //***************************
 // LMIC Events
@@ -561,176 +526,14 @@ void setup()
     //Testing LED ON (remove if Pump is connected )
     setRelay(1);
     digitalWrite(LED_BUILTIN, LOW);
-    state = Standby;
 }
 
 //***************************
 // Loop
 //***************************
 
-uint32_t secondsWriteDisplay = 0;
-uint32_t millisSentTTN = 0;
-int seconds = 0;
-uint32_t lastWrite=0;
-uint32_t currentTimestamp =0;
-
 void loop() {
-
-}
-
-void loopOld()
-{
-    //delay(5000);
-  //  Serial.println(rtc.getEpoch());
-    currentTimestamp = rtc.getEpoch();
-    
-    if ((currentTimestamp - lastWrite > 2)){
-        lastWrite = currentTimestamp;
-        writeDisplay();
-    }
-    switch (state)
-    {
-    case PumpeAus:
-        state=Standby;
-        break;
-
-    case PumpeAn:
-         if (millis() -millisNow>5000){
-         millisNow=millis();
-             Serial.print("Current State: PumpeAn (");
-             Serial.print((millis() -millisNow));
-             Serial.println(" s)");
-     }
-        
-        if ((Flower_Pot_Full) || (Water_Tank_Empty) || (currentTimestamp - Time_Last_Pump_Start > Irrigation_Duration))
-        {
-            pumpeStop();
-            state = PumpeAus;
-            Serial.println("State: PumpeAn --> PumpeAus");
-            Time_Last_Irrigation = currentTimestamp;
-           // Time_Last_Pump_Start = currentTimestamp;
-        }
-         
-
-        break;
-    case Standby:
-       
-        if (currentTimestamp - secondsWriteDisplay > 10)
-        {
-            secondsWriteDisplay = currentTimestamp;
-#ifdef OLED
-            writeDisplay();
-#endif
-            readSensors();
-        }
-
-        if ((currentTimestamp - Time_Last_Irrigation > Irrigation_Interval) && (!Flower_Pot_Full) && (!Water_Tank_Empty))
-        {
-            pumpeStart();
-            state = PumpeAn;
-            Serial.println("State: PumpeAus --> PumpeAn");
-            break;
-        }
-      //  delay(1000);
-    /*    Serial.print("Flower Pot full: ");
-        Serial.println(Flower_Pot_Full);
-        Serial.print("Water Empty: ");
-        Serial.println(Water_Tank_Empty);
-        Serial.print("currentTimestamp - Time_Last_Irrigation ");
-        Serial.println(currentTimestamp - Time_Last_Irrigation);
-        Serial.print("Irrigation_Interval ");
-        Serial.println(Irrigation_Interval);
-      */
-     //  delay(2000);
-     if (millis() -millisNow>5000){
-         millisNow=millis();
-             Serial.print("Current State: Standby (");
-             Serial.print(currentTimestamp - Time_Last_Irrigation);
-             Serial.println(" s)");
-     }
-        break;
-    }
-
-    // TTN SEND
-    if((state==PumpeAn)){
-        /*
-            if (currentTimestamp - TimeStampLastSend > Sendeintervall)
-            {   
-                readSensors();
-                dosend ...
-            }
-
-        */
-    }else if (state==Standby)
-    {
-        //Code for sleep Mode
-    }
-    
-
-//writeDisplay();
-#ifdef TTN
-    if (joined == false) // joined hin und wieder true obwohl noch gar nicht joined ??
-    {
-#ifdef OLED
-        display.clearDisplay();
-        display.setCursor(2, 0);
-        display.setTextColor(WHITE);
-        display.setTextSize(2);
-        display.print("Join TTN");
-        display.display();
-#endif
-        os_runloop_once();
-    }
-    else
-    {
-#endif
-
-        if (currentTimestamp - millisSentTTN > 1000 * 1)
-        {
-            millisSentTTN = currentTimestamp;
-#ifdef OLED
-            /* 
-            display.clearDisplay();
-            display.setCursor(2, 0);
-            display.setTextColor(WHITE);
-            display.setTextSize(2);
-            display.print("send TTN");
-            display.display();
-            */
-#endif
-            //  os_runloop_once();
-            //do_send(&sendjob);
-        }
-
-#ifdef TTN
-    }
-#endif
-    //  os_runloop_once();
-
-#ifdef TTN
     os_runloop_once();
-#endif
-/*
-#ifdef OLED
-    readSensors();
-    writeDisplay();
-#endif
-*/
-}
-
-/**
- * Reads temperature, pressure, and humidity
- * from BME
- */
-void readBME()
-{
-    //BME
-    bme.takeForcedMeasurement();
-    temp = bme.readTemperature();
-    // pressure
-    pressure = bme.readPressure() / 100;
-    // humidity
-    hum = bme.readHumidity();
 }
 
 /**
@@ -761,23 +564,6 @@ float readTensiometerInternalWaterLevel()
     return distance;
 }
 
-/**
- * Checks if the water tank is empty
- */
-void readIfWaterTankEmpy()
-{
-    Water_Tank_Empty = digitalRead(PIN_WATER_TANK_EMPTY);
-}
-
-/**
- * Checks if the water level has reached the upper
- * level of the flower pot
- */
-void readIfFlowerPutFull()
-{
-    Flower_Pot_Full = digitalRead(PIN_FLOWER_POT_FULL);
-}
-
 void printRTC()
 {
     printdigit(rtc.getDay());
@@ -794,14 +580,6 @@ void printRTC()
     Serial.print("\t");
 }
 
-void readSensors()
-{
-    readBME();
-    readTensiometerInternalWaterLevel();
-    readIfWaterTankEmpy();
-    readIfFlowerPutFull();
-    readTensiometerPressure();
-}
 
 void printdigit(int number)
 {
@@ -813,9 +591,9 @@ void printdigit(int number)
     Serial.print(number);
 }
 #ifdef OLED
-void writeDisplay()
-{   readSensors();
-    int range = 0;
+// @todo has to be refactore to print state object
+void writeDisplay() {
+    /*int range = 0;
     display.clearDisplay();
     display.setCursor(1, 0);
     display.setTextColor(WHITE);
@@ -851,16 +629,7 @@ void writeDisplay()
     display.print(TENSIOMETER_PRESSURE);
     display.print(rtc.getSeconds());
     display.println(" ");
-    display.display();
-    /*
-  Serial.print("Ambient: ");
-  Serial.print(s_vlx6180.readAmbientContinuous());
-  if (s_vlx6180.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
-  Serial.print("\tRange: ");
-  Serial.print(s_vlx6180.readRangeContinuousMillimeters());
-  if (s_vlx6180.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
-  Serial.println();
-*/
+    display.display();*/
 }
 #endif
 
@@ -978,14 +747,19 @@ void sleepForSeconds(int seconds)
 #endif
 }
 
+void deepSleep(uint32_t sleepTimeInMilliSeconds) {
+    rtc.setAlarmEpoch(rtc.getEpoch() + sleepTimeInMilliSeconds);
+    rtc.enableAlarm(rtc.MATCH_YYMMDDHHMMSS);
+    rtc.attachInterrupt(alarmMatch);
+    rtc.standbyMode();
+}
+
 /**
  * Starts the pump to pump water into the plant.
  */
 void pumpeStart()
 {
-    
     setRelay(1);
-    Time_Last_Pump_Start = currentTimestamp;
 }
 
 /**
@@ -995,60 +769,3 @@ void pumpeStop()
 {
     setRelay(0);
 }
-
-////////////////////////
-////////////////////////
-////////////////////////
-
-void releaseInt()
-{
-    Water_Tank_Empty = false;
-    Flower_Pot_Full = false;
-#ifdef OLED
-    writeDisplay();
-#endif
-    setRelay(1);
-}
-
-//***************************
-// Read sonic distance
-//***************************
-/*
-int sonic()
-{
-    delay(300);
-
-    long duration;
-    long distance;
-
-    // Kurz anschalten ausschalten, damit es nachher gleich rauschfreier ist.
-    digitalWrite(PIN_SONIC_TRIG, LOW);
-    delay(5);
-
-    // Einmal kurz für 10ms einen ton senden
-    digitalWrite(PIN_SONIC_TRIG, HIGH);
-    delay(10);
-    digitalWrite(PIN_SONIC_TRIG, LOW);
-
-    // per pulseIn die Zeit abfragen, bis das Signal wieder zurück kam.
-    duration = pulseIn(PIN_SONIC_ECHO, HIGH);
-    // Die Dauer durch 2, weil wir nur eine Strecken wollen, multipliziert mit der Schallgeschwindigkeit in cm/ms.
-    // Ergibt dann den Abstand in cm.
-    distance = (duration / 2) * 0.03432;
-
-    if (distance >= 500 || distance <= 0)
-    {
-        Serial.print("Kein gültiger Wert: ");
-        Serial.println(distance);
-    }
-    else
-    {
-        Serial.print(distance);
-        Serial.println(" cm");
-    }
-
-    delay(100);
-
-    return distance;
-}
-*/
