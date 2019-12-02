@@ -185,6 +185,17 @@ state_t do_state_read_sensors(instance_data_t *data) {
 }
 
 state_t do_state_send_data(instance_data_t *data) {
+    /*
+                        timeLastIrrigationStart;        4
+    float               temperature,                    2
+                        humidity,                       2
+                        airPressure,                    2
+                        tensiometerPressure,            2
+                        tensiometerInternalWaterLevel;  1
+    boolean             waterTankEmpty = true;          1
+    boolean             flowerPotFull = false;          1
+    */
+
     // TODO
     data->timeLastDataSent = rtc.getEpoch();
     return run_state(STANDBY, data);
@@ -196,7 +207,7 @@ state_t do_state_standby( instance_data_t *data ) {
             return run_state(READ_SENSORS, data);
         }
 
-        if(data->waterTankEmpty
+        if(!data->waterTankEmpty
             && rtc.getEpoch() > data->timeLastIrrigationStart + data->config->irrigationInterval
             && data->tensiometerPressure <= data->config->tensiometerMinPressure) {
             
@@ -591,7 +602,7 @@ void printdigit(int number)
     Serial.print(number);
 }
 #ifdef OLED
-// @todo has to be refactore to print state object
+// @todo has to be refactored to print state object
 void writeDisplay() {
     /*int range = 0;
     display.clearDisplay();
