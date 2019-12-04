@@ -232,10 +232,10 @@ state_t do_state_pump_start( instance_data_t *data ) {
 
     while(true) {
         // Water Tank @TODO validate correct assignment
-        data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? false : true;
+        data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? true : false;
 
         // Flower Pot @TODO validate correct assignment
-        data->flowerPotFull  = digitalRead(PIN_FLOWER_POT_FULL)  == 1 ? false : true;
+        data->flowerPotFull  = digitalRead(PIN_FLOWER_POT_FULL)  == 1 ? true : false;
 
         if( data->waterTankEmpty
             || data->flowerPotFull
