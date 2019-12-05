@@ -129,9 +129,9 @@ typedef struct {
     float               temperature,
                         humidity,
                         airPressure,
-                        tensiometerPressure,
-                        tensiometerInternalWaterLevel;
+                        tensiometerPressure;
     uint32_t            timeLastDataSent;
+    uint8_t             tensiometerInternalWaterLevel;
     boolean             waterTankEmpty = true;
     boolean             flowerPotFull = false;
 } instance_data_t ;
@@ -179,7 +179,8 @@ state_t do_state_read_sensors(instance_data_t *data) {
 
     // Read tensiometer (soil moisture)
     data->tensiometerPressure = readTensiometerPressure();
-    data->tensiometerInternalWaterLevel = readTensiometerInternalWaterLevel();
+    // No need for sub-mm accuracy
+    data->tensiometerInternalWaterLevel = (uint8_t) round(readTensiometerInternalWaterLevel());
 
     return run_state(SEND_DATA, data);
 }
@@ -195,6 +196,45 @@ state_t do_state_send_data(instance_data_t *data) {
     boolean             waterTankEmpty = true;          1
     boolean             flowerPotFull = false;          1
     */
+
+   byte payload[20];
+
+    // time of last irrigation
+    payload[0] = (byte) ((data->timeLastIrrigationStart & 0xFF000000) >> 24 );
+    payload[1] = (byte) ((data->timeLastIrrigationStart & 0x00FF0000) >> 16 );
+    payload[2] = (byte) ((data->timeLastIrrigationStart & 0x0000FF00) >> 8  );
+    payload[3] = (byte) ((data->timeLastIrrigationStart & 0X000000FF)       );
+
+    // temperature
+    int temp = round((data->temperature +50) * 100);
+    payload[4] = highByte(temp);
+    payload[5] = lowByte(temp);
+
+    // air pressure
+    int pressure = round(data->airPressure/100);
+    payload[6] = highByte(pressure);
+    payload[7] = lowByte(pressure);
+
+    // humidity
+    int humidity = round(data->humidity * 100);
+    payload[8] = highByte(humidity);
+    payload[9] = lowByte(humidity);
+
+    // tensiometer internal pressure
+    int tensioPressure = round(data->tensiometerPressure);
+    payload[10] = highByte(tensioPressure);
+    payload[11] = lowByte(tensioPressure);
+    
+    // tensiometer internal distance
+    payload[12] = data->tensiometerInternalWaterLevel;
+
+    // bools
+    payload[13] = 0;
+    if (data->waterTankEmpty) payload[13] |= 1 << 0;
+    if (data->waterTankEmpty) payload[13] |= 1 << 1;
+    
+
+    
 
     // TODO
     data->timeLastDataSent = rtc.getEpoch();
