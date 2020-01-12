@@ -26,10 +26,11 @@
 #include <VL6180X.h>
 
 #ifdef LOW_POWER
-#include "LowPower.h"
+#include <util/atomic.h>
+#include <LowPower.h>
 #endif
 
-#ifdef RTC
+#ifdef RTClock
 #include <RTCZero.h>
 RTCZero rtc;
 #endif
@@ -45,7 +46,8 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 // declaring functions
 void onEvent(ev_t ev);
 void do_send(osjob_t *j);
-void sleepForSeconds(int seconds);
+void do_logic(osjob_t *j);
+void sleepForMilliSeconds(int milliSeconds);
 void setRelay(int state);
 void pumpeStart();
 void pumpeStop();
@@ -53,7 +55,8 @@ void writeDisplay();
 float readTensiometerPressure();
 float readTensiometerInternalWaterLevel();
 void printdigit(int number);
-void deepSleep(uint32_t sleepTimeInMilliSeconds);
+void deepSleepRTC(uint32_t sleepTimeInMilliSeconds);
+uint32_t getTime();
 
 //***************************
 // TTN und LMIC
@@ -62,7 +65,7 @@ void deepSleep(uint32_t sleepTimeInMilliSeconds);
 bool joined = false;
 
 static osjob_t sendjob;
-const unsigned TX_INTERVAL = 150;
+static osjob_t logicjob;
 
 //***************************
 // Pins und Sensoren
@@ -109,19 +112,22 @@ typedef enum {
     SEND_DATA,
     STANDBY,
     PUMP_START,
+    PUMP_RUN,
     PUMP_STOP,
     NUM_STATES } state_t;
 
+// strcut to config & parameters
 typedef struct {
-    uint32_t            irrigationInterval, // in milliseconds
-                        irrigationDuration,
-                        irrigationPause,
-                        durationIrrigationPause,
-                        txInterval,
-                        defaultSleepTime;
+    uint32_t            irrigationIntervalMs, // in milliseconds
+                        irrigationDurationMs,
+                        irrigationPauseMs,
+//                        durationIrrigationPauseMs,
+                        txIntervalMs,
+                        defaultSleepTimeMs;
     float               tensiometerMinPressure;
 } hochbeet_config_t;
 
+// struct to store current state of hochbeet
 typedef struct {
     hochbeet_config_t   *config;
     uint32_t            timeLastPumpStart,
@@ -132,10 +138,22 @@ typedef struct {
                         tensiometerPressure;
     uint32_t            timeLastDataSent;
     uint8_t             tensiometerInternalWaterLevel;
-    boolean             waterTankEmpty = true;
-    boolean             flowerPotFull = false;
+    boolean             waterTankEmpty;
+    boolean             flowerPotFull;
 } instance_data_t ;
 
+// unpretty workaround to access state ojects within LMIC OC jobs
+state_t cur_state = READ_SENSORS; // set initial state to READ_SENSORS
+hochbeet_config_t hochbeet_config = {
+    .irrigationIntervalMs = (uint32_t)8 * 60 * 60 * 1000, // 8 h
+    .irrigationDurationMs = (uint32_t)5 * 60 * 1000, // 5 min
+    .irrigationPauseMs = (uint32_t)30 * 1000, // 30 s
+    .txIntervalMs = (uint32_t)15 * 60 * 1000, // 15 min
+    .defaultSleepTimeMs = 1000, // 500 ms
+    .tensiometerMinPressure = 70.0f, // 70 mBar
+};
+instance_data_t hochbeet_data = { &hochbeet_config, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, true, false };
+byte payload[20];
 
 
 typedef state_t state_func_t( instance_data_t *data );
@@ -144,25 +162,19 @@ state_t do_state_read_sensors( instance_data_t *data );
 state_t do_state_send_data( instance_data_t *data );
 state_t do_state_standby( instance_data_t *data );
 state_t do_state_pump_start( instance_data_t *data );
+state_t do_state_pump_run( instance_data_t *data );
 state_t do_state_pump_stop( instance_data_t *data );
 
 
 state_func_t* const state_table[ NUM_STATES ] = {
-    do_state_read_sensors, do_state_send_data, do_state_standby, do_state_pump_start, do_state_pump_stop
+    do_state_read_sensors, do_state_send_data, do_state_standby, do_state_pump_start, do_state_pump_run, do_state_pump_stop
 };
 
 state_t run_state( state_t cur_state, instance_data_t *data ) {
     return state_table[ cur_state ]( data );
 };
 
-enum STATES
-{
-    PumpeAus,
-    PumpeAn,
-    Standby,
-    Error
-};
-
+// reads sensors and stores measurements
 state_t do_state_read_sensors(instance_data_t *data) {
     // BME 280
     bme.takeForcedMeasurement();
@@ -170,10 +182,10 @@ state_t do_state_read_sensors(instance_data_t *data) {
     data->humidity = bme.readHumidity();
     data->airPressure = bme.readPressure();
 
-    // Water Tank @TODO validate correct assignment
+    // Water Tank @todo validate correct assignment
     data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? false : true;
 
-    // Flower Pot @TODO validate correct assignment
+    // Flower Pot @todo validate correct assignment
     data->flowerPotFull  = digitalRead(PIN_FLOWER_POT_FULL)  == 1 ? false : true;
 
 
@@ -185,6 +197,7 @@ state_t do_state_read_sensors(instance_data_t *data) {
     return run_state(SEND_DATA, data);
 }
 
+// prepares measurements for transmission and starts send_job
 state_t do_state_send_data(instance_data_t *data) {
     /*
                         timeLastIrrigationStart;        4
@@ -197,7 +210,6 @@ state_t do_state_send_data(instance_data_t *data) {
     boolean             flowerPotFull = false;          1
     */
 
-   byte payload[20];
 
     // time of last irrigation
     payload[0] = (byte) ((data->timeLastIrrigationStart & 0xFF000000) >> 24 );
@@ -231,78 +243,83 @@ state_t do_state_send_data(instance_data_t *data) {
     // bools
     payload[13] = 0;
     if (data->waterTankEmpty) payload[13] |= 1 << 0;
-    if (data->waterTankEmpty) payload[13] |= 1 << 1;
+    //if (data->waterTankEmpty) payload[13] |= 1 << 1;
     
 
-    
+    // schedule sendjob
+    os_setCallback(&sendjob, do_send);    
 
-    // TODO
-    data->timeLastDataSent = rtc.getEpoch();
+    data->timeLastDataSent = getTime();
     return run_state(STANDBY, data);
 }
 
 state_t do_state_standby( instance_data_t *data ) {
-    while(true) {
-        if(rtc.getEpoch() > data->timeLastDataSent + data->config->txInterval) {
-            return run_state(READ_SENSORS, data);
-        }
-
-        if(!data->waterTankEmpty
-            && rtc.getEpoch() > data->timeLastIrrigationStart + data->config->irrigationInterval
-            && data->tensiometerPressure <= data->config->tensiometerMinPressure) {
-            
-            return run_state(PUMP_START, data);
-        }
-
-        deepSleep(data->config->defaultSleepTime);
+    
+    if(getTime() > data->timeLastDataSent + data->config->txIntervalMs) {
+        return run_state(READ_SENSORS, data);
     }
+
+    if(!data->waterTankEmpty
+        && getTime() > data->timeLastIrrigationStart + data->config->irrigationIntervalMs
+        && data->tensiometerPressure <= data->config->tensiometerMinPressure) {
+            
+        return run_state(PUMP_START, data);
+    }
+
+    sleepForMilliSeconds(data->config->defaultSleepTimeMs);
+    return run_state(STANDBY, data);
 }
 
+// starts pump
 state_t do_state_pump_start( instance_data_t *data ) {
     // If starting a new irrigation, set start time (note: a single irrigation
     // consists of multiple irrigation intervalls)
     if(data->timeLastIrrigationStart == 0) {
-        data->timeLastIrrigationStart = rtc.getEpoch();
+        data->timeLastIrrigationStart = getTime();
     }
 
     // Set start of current irrigation intervall
-    data->timeLastPumpStart = rtc.getEpoch();
+    data->timeLastPumpStart = getTime();
 
     pumpeStart();
 
-    while(true) {
-        // Water Tank @TODO validate correct assignment
-        data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? true : false;
+    return run_state(PUMP_RUN, data);
+}
 
-        // Flower Pot @TODO validate correct assignment
-        data->flowerPotFull  = digitalRead(PIN_FLOWER_POT_FULL)  == 1 ? true : false;
+state_t do_state_pump_run(instance_data_t *data) {
+    // Water Tank @TODO validate correct assignment
+    data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? true : false;
 
-        if( data->waterTankEmpty
-            || data->flowerPotFull
-            || rtc.getEpoch() > data->timeLastPumpStart + data->config->irrigationInterval) {
-                return run_state(PUMP_STOP, data);
-            }
+    // Flower Pot @TODO validate correct assignment
+    data->flowerPotFull  = digitalRead(PIN_FLOWER_POT_FULL)  == 1 ? true : false;
+
+    if( data->waterTankEmpty
+        || data->flowerPotFull
+        || getTime() > data->timeLastPumpStart + data->config->irrigationIntervalMs) {
+            return run_state(PUMP_STOP, data);
     }
+
+    return run_state(PUMP_RUN, data);   
 }
 
 state_t do_state_pump_stop ( instance_data_t *data ) {
     pumpeStop();
 
-    while(true) {
-        // Irrigation complete or water tank empty (has to be checked first!)
-        if(data->waterTankEmpty
-            || rtc.getEpoch() > data->timeLastIrrigationStart + data->config->irrigationDuration) {
-                return run_state(STANDBY, data);
-        }
-
-        // Continue irrigation after pause
-        if(rtc.getEpoch() > data->timeLastPumpStart + data->config->irrigationInterval + data->config->irrigationPause
-            && rtc.getEpoch() < data->timeLastIrrigationStart + data->config->irrigationDuration) {
-                return run_state(PUMP_START, data);
-        }
-
-        deepSleep(data->config->defaultSleepTime);
+    
+    // Irrigation complete or water tank empty (has to be checked first!)
+    if(data->waterTankEmpty
+        || getTime() > data->timeLastIrrigationStart + data->config->irrigationDurationMs) {
+            return run_state(STANDBY, data);
     }
+
+    // Continue irrigation after pause
+    if(getTime() > data->timeLastPumpStart + data->config->irrigationIntervalMs + data->config->irrigationPauseMs
+        && getTime() < data->timeLastIrrigationStart + data->config->irrigationDurationMs) {
+            return run_state(PUMP_START, data);
+    }
+
+    sleepForMilliSeconds(data->config->defaultSleepTimeMs / 2);
+    return run_state(PUMP_STOP, data);
 }
 
 //***************************
@@ -360,6 +377,10 @@ void onEvent(ev_t ev)
         // during join, but because slow data rates change max TX
         // size, we don't use it in this example.
         LMIC_setLinkCheckMode(0);
+
+        // Start first logic job here
+        os_setCallback(&logicjob, do_logic);
+
         break;
     case EV_JOIN_FAILED:
         Serial.println(F("EV_JOIN_FAILED"));
@@ -420,55 +441,13 @@ void do_send(osjob_t *j)
     }
     else
     {
-
-        //****************
-        // BME Read
-        //****************
-        bme.takeForcedMeasurement();
-
-        // temp
-        int temp_int = round((bme.readTemperature() + 50) * 100);
-        Serial.print("Temp: ");
-        Serial.println(temp_int);
-
-        // pressure
-        int pressure_int = round(bme.readPressure() / 100);
-        Serial.print("Pressure: ");
-        Serial.println(pressure_int);
-
-        // humidity
-        int hum_int = round(bme.readHumidity() * 100);
-        Serial.print("Humidity: ");
-        Serial.println(hum_int);
-
-        //****************
-        // Sonic Read
-        //****************
-        int distance = s_vlx6180.readRangeContinuousMillimeters(); //sonic();
-                                                                   //Serial.print(s_vlx6180.readRangeContinuousMillimeters());
-        if (s_vlx6180.timeoutOccurred())
-        {
-            distance = 255;
-        }
-
-        //****************
-        // Payload
-        //****************
-        byte payload[8];
-        // dht hum and temp
-        payload[0] = highByte(hum_int);
-        payload[1] = lowByte(hum_int);
-        payload[2] = highByte(temp_int);
-        payload[3] = lowByte(temp_int);
-        payload[4] = highByte(pressure_int);
-        payload[5] = lowByte(pressure_int);
-        // distance (could also be encoded in one byte for the hochbeet?)
-        payload[6] = highByte(distance);
-        payload[7] = lowByte(distance);
-
         LMIC_setTxData2(1, (uint8_t *)payload, sizeof(payload), 0);
         Serial.println(F("Packet queued"));
     }
+}
+
+void do_logic(osjob_t *j) {
+    cur_state = run_state( cur_state, &hochbeet_data );
 }
 
 //***************************
@@ -483,7 +462,7 @@ void setup()
 
     Serial.println(F("Starting"));
 
-#ifdef RTC
+#ifdef RTClock
     // configure RTC
     rtc.begin();
     rtc.setTime(14, 4, 30);
@@ -492,7 +471,7 @@ void setup()
 
 #endif
 #ifdef DEBUG
-    Serial.println(rtc.getEpoch());
+    Serial.println(getTime());
 #endif
 
 #ifdef OLED
@@ -571,7 +550,7 @@ void setup()
     // Reset the MAC state. Session and pending data transfers will be discarded.
     LMIC_reset();
     LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100);
-    do_send(&sendjob);
+    LMIC_startJoining();
 #endif
 
     //Testing LED ON (remove if Pump is connected )
@@ -594,10 +573,10 @@ void loop() {
 float readTensiometerInternalWaterLevel()
 {
     s_vlx6180.startRangeContinuous();
-    u_int8_t numberOfSuccesfullMeasurements = 0;
+    uint8_t numberOfSuccesfullMeasurements = 0;
     float distance = 0.0f;
 
-    for (u_int8_t i = 0; i < 20; i++)
+    for (uint8_t i = 0; i < 20; i++)
     {
         float currentDistance = s_vlx6180.readRangeContinuousMillimeters();
         if (!s_vlx6180.timeoutOccurred())
@@ -615,6 +594,7 @@ float readTensiometerInternalWaterLevel()
     return distance;
 }
 
+#ifdef RTClock
 void printRTC()
 {
     printdigit(rtc.getDay());
@@ -630,7 +610,7 @@ void printRTC()
     printdigit(rtc.getSeconds());
     Serial.print("\t");
 }
-
+#endif
 
 void printdigit(int number)
 {
@@ -718,7 +698,7 @@ float readTensiometerPressure()
     return tensiometerPressure;
 }
 
-#ifdef RTC
+#ifdef RTClock
 /**
  * Called after MCU is waked up by RTC alarm.
  * 
@@ -772,38 +752,70 @@ void alarmSet(int alarmDelaySeconds)
 #endif
 
 /**
- * Powers down node for <seconds> s.
+ * Returns time since system start. Dependend on the board's 
+ * capabilities using rtc or millis.
  */
-void sleepForSeconds(int seconds)
+uint32_t getTime() {
+    #ifdef LOW_POWER
+        return millis();
+    #endif
+
+    #ifdef RTClock
+        return rtc.getEpoch();
+    #endif
+}
+
+/**
+ * Powers down node for <milliseconds> ms.
+ */
+void sleepForMilliSeconds(int milliSeconds)
 {
+    // is there any critical job within sleep time?
+    if(os_queryTimeCriticalJobs(milliSeconds) == 1) {
+        // do not sleep
+        return;
+    }
+
     // Ensure all debugging messages are sent before sleep
     Serial.flush();
 
     // @todo kann eigentlich weg, oder?
 #ifdef LOW_POWER
     // Going into sleep for more than 8 s – any better idea?
-    int sleepCycles = round(seconds / 8);
+    int sleepCycles = round(milliSeconds/1000 / 8);
     for (int i = 0; i < sleepCycles; i++)
     {
         LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
     }
+
+    // Update the millis() and micros() counters, so duty cycle
+    // calculations remain correct. This is a hack, fiddling with
+    // Arduino's internal variables, which is needed until
+    // https://github.com/arduino/Arduino/issues/5087 is fixed.
+    // taken from https://github.com/meetjestad/mjs_firmware/blob/2333164163be7b569846270ff28122637bfe8e78/mjs_firmware.ino#L232-L238
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      extern volatile unsigned long timer0_millis;
+      extern volatile unsigned long timer0_overflow_count;
+      timer0_millis += sleepCycles * 8 * 1000;
+      // timer0 uses a /64 prescaler and overflows every 256 timer ticks
+      timer0_overflow_count += microsecondsToClockCycles((uint32_t)sleepCycles * 8 * 1000 * 1000) / (64 * 256);
+    }
 #endif
 
-#ifdef RTC
-    alarmSet(seconds);
-    Serial.end();
-
-    rtc.standbyMode();
-
+#ifdef RTClock
+    deepSleepRTC(milliSeconds);
 #endif
 }
 
-void deepSleep(uint32_t sleepTimeInMilliSeconds) {
+#ifdef RTClock
+void deepSleepRTC(uint32_t sleepTimeInMilliSeconds) {
     rtc.setAlarmEpoch(rtc.getEpoch() + sleepTimeInMilliSeconds);
     rtc.enableAlarm(rtc.MATCH_YYMMDDHHMMSS);
     rtc.attachInterrupt(alarmMatch);
     rtc.standbyMode();
 }
+#endif
+
 
 /**
  * Starts the pump to pump water into the plant.
