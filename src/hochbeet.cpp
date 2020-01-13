@@ -159,6 +159,7 @@ enum STATES
 {
     PumpeAus,
     PumpeAn,
+    PendingWatering,
     Standby,
     Error
 };
