@@ -498,6 +498,8 @@ void onEvent(ev_t ev)
 //***************************
 void do_send(osjob_t *j)
 {
+    Serial.print("Executing function: ");
+    Serial.println(__func__);
     if (LMIC.opmode & OP_TXRXPEND)
     {
         Serial.println(F("OP_TXRXPEND, not sending"));
