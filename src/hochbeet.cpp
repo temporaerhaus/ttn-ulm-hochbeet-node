@@ -21,10 +21,13 @@
 #include <hal/hal.h>
 #include <SPI.h>
 #include <Adafruit_Sensor.h>
+#ifdef PiBME280
 #include <Adafruit_BME280.h>
+#endif
 #include <Wire.h>
+#ifdef VL6180
 #include <VL6180X.h>
-
+#endif
 #ifdef LOW_POWER
 #include <util/atomic.h>
 #include <LowPower.h>
@@ -43,6 +46,13 @@ RTCZero rtc;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #endif
 
+#ifdef adaRTCLIB
+#include <RTClib.h>
+String getDate();
+char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+RTC_DS3231 rtc;
+
+#endif
 // declaring functions
 void onEvent(ev_t ev);
 void do_send(osjob_t *j);
@@ -70,11 +80,21 @@ static osjob_t logicjob;
 //***************************
 // Pins und Sensoren
 //***************************
+//LMIC
+const lmic_pinmap lmic_pins = {
+    .nss = 10,
+    .rxtx = LMIC_UNUSED_PIN,
+    .rst = 9,
+    .dio = {2, 6, 7},
+};
+
+#ifdef PiBME280
 Adafruit_BME280 bme;  // I2C, depending on your BME, you have to use address 0x77 (default) or 0x76, see below
-#define BME_ADDR 0x77 // use address 0x77 (default) or 0x76
-
+#define BME_ADDR 0x76 // use address 0x77 (default) or 0x76
+#endif
+#ifdef VL6180
 VL6180X s_vlx6180; // I2C, Pololu VL6180X Time-of-Flight Distance Sensor adress 0x29
-
+#endif
 //#define PIN_SONIC_TRIG 3
 //#define PIN_SONIC_ECHO 4
 
@@ -103,9 +123,9 @@ const float maxPressure = 500.0f;
 // Water Level Sensors
 #define PIN_RELEASE_BUTTON 13   //Buttton to reset Error
 #define PIN_WATER_TANK_EMPTY 11 //Tank (A4)
-#define PIN_FLOWER_POT_FULL 12  //flowers
+#define PIN_FLOWER_POT_FULL 19  //flowers
 
-#define PIN_RELAY 19
+#define PIN_RELAY 12
 
 typedef enum { 
     READ_SENSORS,
@@ -148,7 +168,7 @@ hochbeet_config_t hochbeet_config = {
     .irrigationIntervalMs = (uint32_t)8 * 60 * 60 * 1000, // 8 h
     .irrigationDurationMs = (uint32_t)5 * 60 * 1000, // 5 min
     .irrigationPauseMs = (uint32_t)30 * 1000, // 30 s
-    .txIntervalMs = (uint32_t)15 * 60 * 1000, // 15 min
+    .txIntervalMs = (uint32_t) 2*60, // 2 * 60 * 1000, // 2 min
     .defaultSleepTimeMs = 1000, // 500 ms
     .tensiometerMinPressure = 70.0f, // 70 mBar
 };
@@ -171,16 +191,36 @@ state_func_t* const state_table[ NUM_STATES ] = {
 };
 
 state_t run_state( state_t cur_state, instance_data_t *data ) {
+    #ifdef DEBUG1
+    Serial.println("run_state");
+    #endif
     return state_table[ cur_state ]( data );
 };
 
 // reads sensors and stores measurements
 state_t do_state_read_sensors(instance_data_t *data) {
+    Serial.println("do_state_read_sensors");
     // BME 280
+    #ifdef PiBME280
+
     bme.takeForcedMeasurement();
     data->temperature = bme.readTemperature();
     data->humidity = bme.readHumidity();
     data->airPressure = bme.readPressure();
+    Serial.print("Temp: ");
+    Serial.print(data->temperature);
+    Serial.print(" C\t Hum: ");
+    Serial.print(data->humidity);
+    Serial.print(" %\t Pressure: ");
+    Serial.print(data->airPressure );
+    Serial.println("hpa");
+
+    #else
+    data->temperature = 66.66;
+    data->humidity = 66.66;
+    data->airPressure = 66.66;
+    #endif
+
 
     // Water Tank @todo validate correct assignment
     data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? false : true;
@@ -191,6 +231,9 @@ state_t do_state_read_sensors(instance_data_t *data) {
 
     // Read tensiometer (soil moisture)
     data->tensiometerPressure = readTensiometerPressure();
+    Serial.print("Tensiometer ");
+    Serial.print(data->tensiometerPressure );
+    Serial.println("");
     // No need for sub-mm accuracy
     data->tensiometerInternalWaterLevel = (uint8_t) round(readTensiometerInternalWaterLevel());
 
@@ -199,6 +242,7 @@ state_t do_state_read_sensors(instance_data_t *data) {
 
 // prepares measurements for transmission and starts send_job
 state_t do_state_send_data(instance_data_t *data) {
+    Serial.println("do_state_send_data");
     /*
                         timeLastIrrigationStart;        4
     float               temperature,                    2
@@ -254,8 +298,20 @@ state_t do_state_send_data(instance_data_t *data) {
 }
 
 state_t do_state_standby( instance_data_t *data ) {
-    
-    if(getTime() > data->timeLastDataSent + data->config->txIntervalMs) {
+   // Serial.println("do_state_standby");
+    os_runloop_once();
+
+    #ifdef DEBUG1
+    Serial.println(getTime());
+    Serial.println(data->timeLastDataSent);
+    Serial.println(data->config->txIntervalMs);
+    Serial.println(data->timeLastDataSent + data->config->txIntervalMs);
+    Serial.println(data->timeLastDataSent+ data->config->txIntervalMs-getTime());
+    delay(1000);
+    #endif
+
+    if(getTime() - data->config->txIntervalMs > data->timeLastDataSent  ) {
+    //if(getTime() > data->timeLastDataSent + data->config->txIntervalMs) {
         return run_state(READ_SENSORS, data);
     }
 
@@ -272,6 +328,7 @@ state_t do_state_standby( instance_data_t *data ) {
 
 // starts pump
 state_t do_state_pump_start( instance_data_t *data ) {
+    Serial.println("do_state_pump_start");
     // If starting a new irrigation, set start time (note: a single irrigation
     // consists of multiple irrigation intervalls)
     if(data->timeLastIrrigationStart == 0) {
@@ -287,6 +344,7 @@ state_t do_state_pump_start( instance_data_t *data ) {
 }
 
 state_t do_state_pump_run(instance_data_t *data) {
+    Serial.println("do_state_pump_run");
     // Water Tank @TODO validate correct assignment
     data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? true : false;
 
@@ -303,7 +361,9 @@ state_t do_state_pump_run(instance_data_t *data) {
 }
 
 state_t do_state_pump_stop ( instance_data_t *data ) {
+    Serial.println("do_state_pump_stop");
     pumpeStop();
+    
 
     
     // Irrigation complete or water tank empty (has to be checked first!)
@@ -461,6 +521,21 @@ void setup()
     delay(10000); //Backup Delay to transfer sketch
 
     Serial.println(F("Starting"));
+#ifdef adaRTCLIB
+// Initialize RTC
+     if (! rtc.begin()) {
+    Serial.println("Couldn't find RTC");
+    while (1);
+  }
+    if (rtc.lostPower()) {
+    Serial.println("RTC lost power, lets set the time!");
+    // following line sets the RTC to the date & time this sketch was compiled
+ //    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+    // This line sets the RTC with an explicit date & time, for example to set
+    // January 21, 2014 at 3am you would call:
+    // rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
+  }
+#endif
 
 #ifdef RTClock
     // configure RTC
@@ -490,24 +565,28 @@ void setup()
     //***********************
     // Setup BME280
     //if (!bme.begin(BME280_ADDRESS)) {   <-- hat bei mir nicht richtig funktioniert (richtige Adresse war gesetzt ;) )
-    if (!bme.begin())
+        #ifdef PiBME280
+
+    if (!bme.begin(BME_ADDR))
     {
         Serial.println("Could not find a valid BME280 sensor, check wiring!");
         while (1) ;
     }
-
+#endif
     // Set BME in force mode to reduce power consumption
     // force mode = measure, store results, and go into sleep mode
     // until next measurement, see
     // - http://tinkerman.cat/low-power-weather-station-bme280-moteino/
     // - https://github.com/adafruit/Adafruit_BME280_Library/blob/master/examples/advancedsettings/advancedsettings.ino
     // values taken from example of 'Weather / Climate Monitor"
+        #ifdef PiBME280
+
     bme.setSampling(Adafruit_BME280::MODE_FORCED,
                     Adafruit_BME280::SAMPLING_X1, // temperature
                     Adafruit_BME280::SAMPLING_X1, // pressure
                     Adafruit_BME280::SAMPLING_X1, // humidity
                     Adafruit_BME280::FILTER_OFF);
-
+#endif
     //pinMode(PIN_SONIC_TRIG, OUTPUT);
     //pinMode(PIN_SONIC_ECHO, INPUT);
     pinMode(PIN_RELAY, OUTPUT);
@@ -517,11 +596,13 @@ void setup()
     //***********************
 
     Wire.begin();
-    s_vlx6180.init();
+    #ifdef VL6180
+        s_vlx6180.init();
     s_vlx6180.configureDefault();
     s_vlx6180.setTimeout(500);
     // stop continuous mode if already active
     s_vlx6180.stopContinuous();
+    #endif
     delay(500);
 
     //***********************
@@ -546,11 +627,23 @@ void setup()
     //***********************
 #ifdef TTN
 
-    os_init();
+ /*  
+     os_init();
     // Reset the MAC state. Session and pending data transfers will be discarded.
     LMIC_reset();
     LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100);
     LMIC_startJoining();
+*/
+
+      // LMIC init Kai
+  os_init();
+  // Reset the MAC state. Session and pending data transfers will be discarded.
+  LMIC_reset();
+  LMIC_setAdrMode(1);
+  LMIC_setLinkCheckMode(1);
+  LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100);
+  // Start job (sending automatically starts OTAA too)
+  do_send(&sendjob);
 #endif
 
     //Testing LED ON (remove if Pump is connected )
@@ -571,7 +664,9 @@ void loop() {
  * tensiometer
  */
 float readTensiometerInternalWaterLevel()
-{
+{   
+    #ifdef VL6180
+    
     s_vlx6180.startRangeContinuous();
     uint8_t numberOfSuccesfullMeasurements = 0;
     float distance = 0.0f;
@@ -592,6 +687,10 @@ float readTensiometerInternalWaterLevel()
     }
     
     return distance;
+    #else
+    return 1.1;
+    #endif
+
 }
 
 #ifdef RTClock
@@ -763,6 +862,12 @@ uint32_t getTime() {
     #ifdef RTClock
         return rtc.getEpoch();
     #endif
+
+    #ifdef adaRTCLIB
+        DateTime now = rtc.now();
+        return now.unixtime();
+    #endif
+
 }
 
 /**
