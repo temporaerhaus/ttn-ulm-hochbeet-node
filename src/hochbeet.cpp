@@ -241,7 +241,7 @@ state_t do_state_read_sensors(instance_data_t *data) {
     // No need for sub-mm accuracy
     data->tensiometerInternalWaterLevel = (uint8_t) round(readTensiometerInternalWaterLevel());
 
-    return run_state(SEND_DATA, data);
+    return SEND_DATA;
 }
 
 // prepares measurements for transmission and starts send_job
@@ -298,12 +298,11 @@ state_t do_state_send_data(instance_data_t *data) {
     os_setCallback(&sendjob, do_send);    
 
     data->timeLastDataSent = getTime();
-    return run_state(STANDBY, data);
+    return STANDBY;
 }
 
 state_t do_state_standby( instance_data_t *data ) {
    // Serial.println("do_state_standby");
-    os_runloop_once();
     Serial.println(read_srf02() );
 
     delay(1000)    ;
@@ -319,18 +318,18 @@ state_t do_state_standby( instance_data_t *data ) {
 
     if(getTime() - data->config->txIntervalMs > data->timeLastDataSent  ) {
     //if(getTime() > data->timeLastDataSent + data->config->txIntervalMs) {
-        return run_state(READ_SENSORS, data);
+        return READ_SENSORS;
     }
 
     if(!data->waterTankEmpty
         && getTime() > data->timeLastIrrigationStart + data->config->irrigationIntervalMs
         && data->tensiometerPressure <= data->config->tensiometerMinPressure) {
             
-        return run_state(PUMP_START, data);
+        return PUMP_START;
     }
 
     sleepForMilliSeconds(data->config->defaultSleepTimeMs);
-    return run_state(STANDBY, data);
+    return STANDBY;
 }
 
 // starts pump
@@ -347,7 +346,7 @@ state_t do_state_pump_start( instance_data_t *data ) {
 
     pumpeStart();
 
-    return run_state(PUMP_RUN, data);
+    return PUMP_RUN;
 }
 
 state_t do_state_pump_run(instance_data_t *data) {
@@ -361,10 +360,10 @@ state_t do_state_pump_run(instance_data_t *data) {
     if( data->waterTankEmpty
         || data->flowerPotFull
         || getTime() > data->timeLastPumpStart + data->config->irrigationIntervalMs) {
-            return run_state(PUMP_STOP, data);
+            return PUMP_STOP;
     }
 
-    return run_state(PUMP_RUN, data);   
+    return PUMP_RUN;   
 }
 
 state_t do_state_pump_stop ( instance_data_t *data ) {
@@ -376,17 +375,17 @@ state_t do_state_pump_stop ( instance_data_t *data ) {
     // Irrigation complete or water tank empty (has to be checked first!)
     if(data->waterTankEmpty
         || getTime() > data->timeLastIrrigationStart + data->config->irrigationDurationMs) {
-            return run_state(STANDBY, data);
+            return STANDBY;
     }
 
     // Continue irrigation after pause
     if(getTime() > data->timeLastPumpStart + data->config->irrigationIntervalMs + data->config->irrigationPauseMs
         && getTime() < data->timeLastIrrigationStart + data->config->irrigationDurationMs) {
-            return run_state(PUMP_START, data);
+            return PUMP_START;
     }
 
     sleepForMilliSeconds(data->config->defaultSleepTimeMs / 2);
-    return run_state(PUMP_STOP, data);
+    return PUMP_STOP;
 }
 
 //***************************
@@ -444,9 +443,6 @@ void onEvent(ev_t ev)
         // during join, but because slow data rates change max TX
         // size, we don't use it in this example.
         LMIC_setLinkCheckMode(0);
-
-        // Start first logic job here
-        os_setCallback(&logicjob, do_logic);
 
         break;
     case EV_JOIN_FAILED:
@@ -515,6 +511,9 @@ void do_send(osjob_t *j)
 
 void do_logic(osjob_t *j) {
     cur_state = run_state( cur_state, &hochbeet_data );
+
+    // Start next logic job here
+    os_setCallback(&logicjob, do_logic);
 }
 
 //***************************
@@ -650,7 +649,12 @@ void setup()
   LMIC_setLinkCheckMode(1);
   LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100);
   // Start job (sending automatically starts OTAA too)
-  do_send(&sendjob);
+  LMIC_startJoining();
+
+    // Start first logic job here
+    os_setCallback(&logicjob, do_logic);
+
+  //do_send(&sendjob);
 #endif
 
     //Testing LED ON (remove if Pump is connected )
