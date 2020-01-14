@@ -172,12 +172,12 @@ hochbeet_config_t hochbeet_config = {
     .irrigationIntervalMs = (uint32_t)8 * 60 * 60 * 1000, // 8 h
     .irrigationDurationMs = (uint32_t)5 * 60 * 1000, // 5 min
     .irrigationPauseMs = (uint32_t)30 * 1000, // 30 s
-    .txIntervalMs = (uint32_t) 2*60, // 2 * 60 * 1000, // 2 min
+    .txIntervalMs = (uint32_t) 30, // 2 * 60 * 1000, // 2 min
     .defaultSleepTimeMs = 1000, // 500 ms
     .tensiometerMinPressure = 70.0f, // 70 mBar
 };
 instance_data_t hochbeet_data = { &hochbeet_config, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, true, false };
-byte payload[20];
+static byte payload[20];
 
 
 typedef state_t state_func_t( instance_data_t *data );
@@ -295,17 +295,13 @@ state_t do_state_send_data(instance_data_t *data) {
     
 
     // schedule sendjob
-    os_setCallback(&sendjob, do_send);    
+            os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(1), do_send);
 
     data->timeLastDataSent = getTime();
     return STANDBY;
 }
 
 state_t do_state_standby( instance_data_t *data ) {
-   // Serial.println("do_state_standby");
-    Serial.println(read_srf02() );
-
-    delay(1000)    ;
         // Serial.print(" "); Serial.println(digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? true : false);
     #ifdef DEBUG1
     Serial.println(getTime());
@@ -391,6 +387,15 @@ state_t do_state_pump_stop ( instance_data_t *data ) {
 //***************************
 // LMIC Events
 //***************************
+bool isLogicRunning = false;
+
+void printHex2(unsigned v) {
+    v &= 0xff;
+    if (v < 16)
+        Serial.print('0');
+    Serial.print(v, HEX);
+}
+
 void onEvent(ev_t ev)
 {
     Serial.print(os_getTime());
@@ -418,32 +423,40 @@ void onEvent(ev_t ev)
         {
             joined = true;
             u4_t netid = 0;
-            devaddr_t devaddr = 0;
-            u1_t nwkKey[16];
-            u1_t artKey[16];
-            LMIC_getSessionKeys(&netid, &devaddr, nwkKey, artKey);
-            Serial.print("netid: ");
-            Serial.println(netid, DEC);
-            Serial.print("devaddr: ");
-            Serial.println(devaddr, HEX);
-            Serial.print("artKey: ");
-            for (int i = 0; i < sizeof(artKey); ++i)
-            {
-                Serial.print(artKey[i], HEX);
-            }
-            Serial.println("");
-            Serial.print("nwkKey: ");
-            for (int i = 0; i < sizeof(nwkKey); ++i)
-            {
-                Serial.print(nwkKey[i], HEX);
-            }
-            Serial.println("");
+              devaddr_t devaddr = 0;
+              u1_t nwkKey[16];
+              u1_t artKey[16];
+              LMIC_getSessionKeys(&netid, &devaddr, nwkKey, artKey);
+              Serial.print("netid: ");
+              Serial.println(netid, DEC);
+              Serial.print("devaddr: ");
+              Serial.println(devaddr, HEX);
+              Serial.print("AppSKey: ");
+              for (size_t i=0; i<sizeof(artKey); ++i) {
+                if (i != 0)
+                  Serial.print("-");
+                printHex2(artKey[i]);
+              }
+              Serial.println("");
+              Serial.print("NwkSKey: ");
+              for (size_t i=0; i<sizeof(nwkKey); ++i) {
+                      if (i != 0)
+                              Serial.print("-");
+                      printHex2(nwkKey[i]);
+              }
+            Serial.println();
+
         }
         // Disable link check validation (automatically enabled
         // during join, but because slow data rates change max TX
         // size, we don't use it in this example.
         LMIC_setLinkCheckMode(0);
 
+        if(!isLogicRunning) {
+             // Start first logic job here
+            os_setTimedCallback(&logicjob, os_getTime()+sec2osticks(1), do_logic);
+            isLogicRunning = true;
+        }
         break;
     case EV_JOIN_FAILED:
         Serial.println(F("EV_JOIN_FAILED"));
@@ -466,6 +479,7 @@ void onEvent(ev_t ev)
 
         // Schedule next transmission
         //os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
+        
         break;
     case EV_LOST_TSYNC:
         Serial.println(F("EV_LOST_TSYNC"));
@@ -506,7 +520,7 @@ void do_send(osjob_t *j)
     }
     else
     {
-        LMIC_setTxData2(1, (uint8_t *)payload, sizeof(payload), 0);
+        LMIC_setTxData2(1, payload, sizeof(payload)-1, 0);
         Serial.println(F("Packet queued"));
     }
 }
@@ -515,7 +529,7 @@ void do_logic(osjob_t *j) {
     cur_state = run_state( cur_state, &hochbeet_data );
 
     // Start next logic job here
-    os_setCallback(&logicjob, do_logic);
+    os_setTimedCallback(&logicjob, os_getTime()+sec2osticks(1), do_logic);
 }
 
 //***************************
@@ -647,16 +661,18 @@ void setup()
   os_init();
   // Reset the MAC state. Session and pending data transfers will be discarded.
   LMIC_reset();
-  LMIC_setAdrMode(1);
-  LMIC_setLinkCheckMode(1);
+  //LMIC_setAdrMode(1);
+  //LMIC_setLinkCheckMode(1);
   LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100);
   // Start job (sending automatically starts OTAA too)
+  //os_setCallback(&sendjob, do_send);
   LMIC_startJoining();
 
-    // Start first logic job here
-    os_setCallback(&logicjob, do_logic);
-
   //do_send(&sendjob);
+
+    // Start first logic job here
+    // os_setCallback(&logicjob, do_logic);
+
 #endif
 
     //Testing LED ON (remove if Pump is connected )
@@ -888,6 +904,7 @@ uint32_t getTime() {
  */
 void sleepForMilliSeconds(int milliSeconds)
 {
+    return; // TODO
     // is there any critical job within sleep time?
     if(os_queryTimeCriticalJobs(milliSeconds) == 1) {
         // do not sleep
