@@ -66,6 +66,8 @@ float readTensiometerPressure();
 float readTensiometerInternalWaterLevel();
 void printdigit(int number);
 void deepSleepRTC(uint32_t sleepTimeInMilliSeconds);
+uint8_t read_srf02();
+
 uint32_t getTime();
 
 //***************************
@@ -114,6 +116,8 @@ const float maxPressure = 500.0f;
 *   Relay OUT   A5 D?????
 */
 
+#define SRF02_ADDRESS 0x70
+
 #define TENSIOMETER_PRESSURE_PIN A1
 const float VminTyp = 0.2f;
 const float VmaxTyp = 4.7f;
@@ -122,7 +126,7 @@ const float maxPressure = 500.0f;
 
 // Water Level Sensors
 #define PIN_RELEASE_BUTTON 13   //Buttton to reset Error
-#define PIN_WATER_TANK_EMPTY 11 //Tank (A4)
+#define PIN_WATER_TANK_EMPTY 31 //Tank (A4)
 #define PIN_FLOWER_POT_FULL 19  //flowers
 
 #define PIN_RELAY 12
@@ -157,7 +161,7 @@ typedef struct {
                         airPressure,
                         tensiometerPressure;
     uint32_t            timeLastDataSent;
-    uint8_t             tensiometerInternalWaterLevel;
+    uint8_t             tensiometerInternalWaterLevel;                        
     boolean             waterTankEmpty;
     boolean             flowerPotFull;
 } instance_data_t ;
@@ -300,7 +304,10 @@ state_t do_state_send_data(instance_data_t *data) {
 state_t do_state_standby( instance_data_t *data ) {
    // Serial.println("do_state_standby");
     os_runloop_once();
+    Serial.println(read_srf02() );
 
+    delay(1000)    ;
+        // Serial.print(" "); Serial.println(digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? true : false);
     #ifdef DEBUG1
     Serial.println(getTime());
     Serial.println(data->timeLastDataSent);
@@ -921,6 +928,42 @@ void deepSleepRTC(uint32_t sleepTimeInMilliSeconds) {
 }
 #endif
 
+uint8_t read_srf02(){
+     byte byteHigh, byteLow;
+  int distance;
+
+  Wire.beginTransmission(SRF02_ADDRESS); // begin communication with SFR02
+  Wire.write(byte(0x00));          // sets register pointer to the command register (0x00)
+  Wire.write(byte(0x51));          // command sensor to measure in centimeters
+  Wire.endTransmission();          // end transmission
+
+  // Wait for 70 milliseconds
+  delay(70); 
+  
+  Wire.beginTransmission(SRF02_ADDRESS); // begin communication with SFR02
+  Wire.write(byte(0x02));          // sets register pointer to echo #1 register (0x02)
+  Wire.endTransmission();          // end transmission
+   
+  Wire.requestFrom(SRF02_ADDRESS, 2);    // Request 2 bytes from SFR02
+  
+  while(Wire.available() < 2);     // Wait for the bytes to arrive
+  
+  // Read the values
+  byteHigh = Wire.read(); 
+  byteLow = Wire.read();
+ 
+  // Calculate full bearing
+  distance = ((byteHigh<<8) + byteLow);
+
+  // Print data to Serial Monitor window
+  #ifdef DEBUG1
+  Serial.print("$Distance,");
+  Serial.println(distance);
+  #endif
+  // In the demo wait half a second
+  return distance;
+
+}
 
 /**
  * Starts the pump to pump water into the plant.
