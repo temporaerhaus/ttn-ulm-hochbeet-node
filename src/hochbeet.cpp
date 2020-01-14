@@ -164,6 +164,7 @@ typedef struct {
     uint8_t             tensiometerInternalWaterLevel;                        
     boolean             waterTankEmpty;
     boolean             flowerPotFull;
+    boolean             irrigationRunning;
 } instance_data_t ;
 
 // unpretty workaround to access state ojects within LMIC OC jobs
@@ -176,7 +177,7 @@ hochbeet_config_t hochbeet_config = {
     .defaultSleepTimeSec = 1, // 500 ms
     .tensiometerMinPressure = 70.0f, // 70 mBar
 };
-instance_data_t hochbeet_data = { &hochbeet_config, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, true, false };
+instance_data_t hochbeet_data = { &hochbeet_config, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, true, true, false };
 static byte payload[20];
 
 
@@ -333,7 +334,8 @@ state_t do_state_pump_start( instance_data_t *data ) {
     Serial.println("do_state_pump_start");
     // If starting a new irrigation, set start time (note: a single irrigation
     // consists of multiple irrigation intervalls)
-    if(data->timeLastIrrigationStart == 0) {
+    if(!data->irrigationRunning) {
+        data->irrigationRunning = true;
         data->timeLastIrrigationStart = getTime();
     }
 
@@ -371,6 +373,7 @@ state_t do_state_pump_stop ( instance_data_t *data ) {
     // Irrigation complete or water tank empty (has to be checked first!)
     if(data->waterTankEmpty
         || getTime() > data->timeLastIrrigationStart + data->config->irrigationDurationSec) {
+            data->irrigationRunning = false;
             return STANDBY;
     }
 
