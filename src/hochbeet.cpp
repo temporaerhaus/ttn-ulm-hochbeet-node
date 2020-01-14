@@ -57,7 +57,7 @@ RTC_DS3231 rtc;
 void onEvent(ev_t ev);
 void do_send(osjob_t *j);
 void do_logic(osjob_t *j);
-void sleepForMilliSeconds(int milliSeconds);
+void sleepForSeconds(int milliSeconds);
 void setRelay(int state);
 void pumpeStart();
 void pumpeStop();
@@ -142,12 +142,12 @@ typedef enum {
 
 // strcut to config & parameters
 typedef struct {
-    uint32_t            irrigationIntervalMs, // in milliseconds
-                        irrigationDurationMs,
-                        irrigationPauseMs,
+    uint32_t            irrigationIntervalSec, // in milliseconds
+                        irrigationDurationSec,
+                        irrigationPauseSec,
 //                        durationIrrigationPauseMs,
-                        txIntervalMs,
-                        defaultSleepTimeMs;
+                        txIntervalSec,
+                        defaultSleepTimeSec;
     float               tensiometerMinPressure;
 } hochbeet_config_t;
 
@@ -169,11 +169,11 @@ typedef struct {
 // unpretty workaround to access state ojects within LMIC OC jobs
 state_t cur_state = READ_SENSORS; // set initial state to READ_SENSORS
 hochbeet_config_t hochbeet_config = {
-    .irrigationIntervalMs = (uint32_t)8 * 60 * 60 * 1000, // 8 h
-    .irrigationDurationMs = (uint32_t)5 * 60 * 1000, // 5 min
-    .irrigationPauseMs = (uint32_t)30 * 1000, // 30 s
-    .txIntervalMs = (uint32_t) 30, // 2 * 60 * 1000, // 2 min
-    .defaultSleepTimeMs = 1000, // 500 ms
+    .irrigationIntervalSec = (uint32_t)8 * 60 * 60, // 8 h
+    .irrigationDurationSec = (uint32_t)5 * 60, // 5 min
+    .irrigationPauseSec = (uint32_t)30, // 30 s
+    .txIntervalSec = (uint32_t) 1 * 30, // 2 * 60 * 1000, // 2 min
+    .defaultSleepTimeSec = 1, // 500 ms
     .tensiometerMinPressure = 70.0f, // 70 mBar
 };
 instance_data_t hochbeet_data = { &hochbeet_config, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, true, false };
@@ -312,19 +312,19 @@ state_t do_state_standby( instance_data_t *data ) {
     delay(1000);
     #endif
 
-    if(getTime() - data->config->txIntervalMs > data->timeLastDataSent  ) {
+    if(getTime() - data->config->txIntervalSec > data->timeLastDataSent  ) {
     //if(getTime() > data->timeLastDataSent + data->config->txIntervalMs) {
         return READ_SENSORS;
     }
 
     if(!data->waterTankEmpty
-        && getTime() > data->timeLastIrrigationStart + data->config->irrigationIntervalMs
+        && getTime() > data->timeLastIrrigationStart + data->config->irrigationIntervalSec
         && data->tensiometerPressure <= data->config->tensiometerMinPressure) {
             
         return PUMP_START;
     }
 
-    sleepForMilliSeconds(data->config->defaultSleepTimeMs);
+    sleepForSeconds(data->config->defaultSleepTimeSec);
     return STANDBY;
 }
 
@@ -355,7 +355,7 @@ state_t do_state_pump_run(instance_data_t *data) {
 
     if( data->waterTankEmpty
         || data->flowerPotFull
-        || getTime() > data->timeLastPumpStart + data->config->irrigationIntervalMs) {
+        || getTime() > data->timeLastPumpStart + data->config->irrigationIntervalSec) {
             return PUMP_STOP;
     }
 
@@ -370,17 +370,17 @@ state_t do_state_pump_stop ( instance_data_t *data ) {
     
     // Irrigation complete or water tank empty (has to be checked first!)
     if(data->waterTankEmpty
-        || getTime() > data->timeLastIrrigationStart + data->config->irrigationDurationMs) {
+        || getTime() > data->timeLastIrrigationStart + data->config->irrigationDurationSec) {
             return STANDBY;
     }
 
     // Continue irrigation after pause
-    if(getTime() > data->timeLastPumpStart + data->config->irrigationIntervalMs + data->config->irrigationPauseMs
-        && getTime() < data->timeLastIrrigationStart + data->config->irrigationDurationMs) {
+    if(getTime() > data->timeLastPumpStart + data->config->irrigationIntervalSec + data->config->irrigationPauseSec
+        && getTime() < data->timeLastIrrigationStart + data->config->irrigationDurationSec) {
             return PUMP_START;
     }
 
-    sleepForMilliSeconds(data->config->defaultSleepTimeMs / 2);
+    sleepForSeconds(data->config->defaultSleepTimeSec);
     return PUMP_STOP;
 }
 
@@ -902,11 +902,11 @@ uint32_t getTime() {
 /**
  * Powers down node for <milliseconds> ms.
  */
-void sleepForMilliSeconds(int milliSeconds)
+void sleepForSeconds(int seconds)
 {
     return; // TODO
     // is there any critical job within sleep time?
-    if(os_queryTimeCriticalJobs(milliSeconds) == 1) {
+    if(os_queryTimeCriticalJobs(sec2osticks(seconds)) == 1) {
         // do not sleep
         return;
     }
