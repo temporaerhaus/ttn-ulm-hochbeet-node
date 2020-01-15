@@ -173,8 +173,8 @@ hochbeet_config_t hochbeet_config = {
     .irrigationIntervalSec = (uint32_t)8 * 60 * 60, // 8 h
     .irrigationDurationSec = (uint32_t)5 * 60, // 5 min
     .irrigationPauseSec = (uint32_t)30, // 30 s
-    .txIntervalSec = (uint32_t) 1 * 30, // 2 * 60 * 1000, // 2 min
-    .defaultSleepTimeSec = 1, // 500 ms
+    .txIntervalSec = (uint32_t) 5 * 60, // 5 * 60  // 5 min
+    .defaultSleepTimeSec = 1, // 1 s
     .tensiometerMinPressure = 70.0f, // 70 mBar
 };
 instance_data_t hochbeet_data = { &hochbeet_config, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, true, true, false };
@@ -259,7 +259,6 @@ state_t do_state_send_data(instance_data_t *data) {
     boolean             flowerPotFull = false;          1
     */
 
-
     // time of last irrigation
     payload[0] = (byte) ((data->timeLastIrrigationStart & 0xFF000000) >> 24 );
     payload[1] = (byte) ((data->timeLastIrrigationStart & 0x00FF0000) >> 16 );
@@ -317,12 +316,14 @@ state_t do_state_standby( instance_data_t *data ) {
         return READ_SENSORS;
     }
 
-    if(!data->waterTankEmpty
+    // TODO
+    // DISABLED FOR M25 EXHIBITION
+    /*if(!data->waterTankEmpty
         && getTime() > data->timeLastIrrigationStart + data->config->irrigationIntervalSec
         && data->tensiometerPressure <= data->config->tensiometerMinPressure) {
             
         return PUMP_START;
-    }
+    }*/
 
     sleepForSeconds(data->config->defaultSleepTimeSec);
     return STANDBY;
