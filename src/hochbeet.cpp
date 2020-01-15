@@ -293,10 +293,9 @@ state_t do_state_send_data(instance_data_t *data) {
     payload[13] = 0;
     if (data->waterTankEmpty) payload[13] |= 1 << 0;
     //if (data->waterTankEmpty) payload[13] |= 1 << 1;
-    
 
     // schedule sendjob
-            os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(1), do_send);
+    os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(1), do_send);
 
     data->timeLastDataSent = getTime();
     return STANDBY;
@@ -467,6 +466,11 @@ void onEvent(ev_t ev)
     case EV_REJOIN_FAILED:
         Serial.println(F("EV_REJOIN_FAILED"));
         break;
+
+    case EV_JOIN_TXCOMPLETE:
+        Serial.println(F("EV_JOIN_TXCOMPLETE"));
+        break;
+
     case EV_TXCOMPLETE:
         Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
         if (LMIC.txrxFlags & TXRX_ACK)
@@ -670,6 +674,9 @@ void setup()
   // Start job (sending automatically starts OTAA too)
   //os_setCallback(&sendjob, do_send);
   LMIC_startJoining();
+  #if OTAA == true
+  LMIC_setSession (0x1, DEVADDR, NWKSKEY, APPSKEY);
+  #endif
 
   //do_send(&sendjob);
 

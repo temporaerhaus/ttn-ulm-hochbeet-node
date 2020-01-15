@@ -1,15 +1,31 @@
 //Put in TTN Credentials
-// lsb
-static const u1_t PROGMEM DEVEUI[8]= { };
-void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);}
 
-// lsb
-static const u1_t PROGMEM APPEUI[8]= { };
-void os_getArtEui (u1_t* buf) { memcpy_P(buf, APPEUI, 8);}
+#define OTAA true
 
-// msb
-static const u1_t PROGMEM APPKEY[16] = { };
-void os_getDevKey (u1_t* buf) {  memcpy_P(buf, APPKEY, 16);}
+#if OTAA == true
+    // lsb
+    static const u1_t PROGMEM DEVEUI[8]= { };
+    void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);}
+
+    // lsb
+    static const u1_t PROGMEM APPEUI[8]= { };
+    void os_getArtEui (u1_t* buf) { memcpy_P(buf, APPEUI, 8);}
+
+    // msb
+    static const u1_t PROGMEM APPKEY[16] = { };
+    void os_getDevKey (u1_t* buf) {  memcpy_P(buf, APPKEY, 16);}
+#else
+    // msb
+    static const PROGMEM u1_t NWKSKEY[16] = { };
+    // msb
+    static const u1_t PROGMEM APPSKEY[16] = { };
+    static const u4_t DEVADDR = ;
+    void os_getArtEui (u1_t* buf) { }
+    void os_getDevEui (u1_t* buf) { }
+    void os_getDevKey (u1_t* buf) { }
+#endif
+
+
 
 // Pin Mappings
 
