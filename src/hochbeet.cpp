@@ -674,7 +674,7 @@ void setup()
   // Start job (sending automatically starts OTAA too)
   //os_setCallback(&sendjob, do_send);
   LMIC_startJoining();
-  #if OTAA == true
+  #if OTAA == false
   LMIC_setSession (0x1, DEVADDR, NWKSKEY, APPSKEY);
   #endif
 
