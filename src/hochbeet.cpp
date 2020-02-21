@@ -83,11 +83,22 @@ static osjob_t logicjob;
 // Pins und Sensoren
 //***************************
 //LMIC
+
+// PIN MAP for MEGA
+/*
 const lmic_pinmap lmic_pins = {
     .nss = 10,
     .rxtx = LMIC_UNUSED_PIN,
     .rst = 9,
     .dio = {2, 6, 7},
+};*/
+
+// PIN MAP for Feather M0
+const lmic_pinmap lmic_pins = {
+    .nss = 8,
+    .rxtx = LMIC_UNUSED_PIN,
+    .rst = LMIC_UNUSED_PIN,
+    .dio = {3, 6, LMIC_UNUSED_PIN},
 };
 
 #ifdef PiBME280
@@ -125,11 +136,11 @@ const float VrangeTyp = VmaxTyp - VminTyp;
 const float maxPressure = 500.0f;
 
 // Water Level Sensors
-#define PIN_RELEASE_BUTTON 13   //Buttton to reset Error
-#define PIN_WATER_TANK_EMPTY 31 //Tank (A4)
-#define PIN_FLOWER_POT_FULL 19  //flowers
+//#define PIN_RELEASE_BUTTON 13   //Buttton to reset Error
+#define PIN_WATER_TANK_EMPTY 12 //Tank (A4)
+#define PIN_FLOWER_POT_FULL 13  //flowers
 
-#define PIN_RELAY 12
+#define PIN_RELAY A5
 
 typedef enum { 
     READ_SENSORS,
@@ -145,7 +156,6 @@ typedef struct {
     uint32_t            irrigationIntervalSec, // in milliseconds
                         irrigationDurationSec,
                         irrigationPauseSec,
-//                        durationIrrigationPauseMs,
                         txIntervalSec,
                         defaultSleepTimeSec;
     float               tensiometerMinPressure;
@@ -155,6 +165,7 @@ typedef struct {
 typedef struct {
     hochbeet_config_t   *config;
     uint32_t            timeLastPumpStart,
+                        timeLastPumpStop,
                         timeLastIrrigationStart;
     float               temperature,
                         humidity,
@@ -170,14 +181,14 @@ typedef struct {
 // unpretty workaround to access state ojects within LMIC OC jobs
 state_t cur_state = READ_SENSORS; // set initial state to READ_SENSORS
 hochbeet_config_t hochbeet_config = {
-    .irrigationIntervalSec = (uint32_t)8 * 60 * 60, // 8 h
-    .irrigationDurationSec = (uint32_t)5 * 60, // 5 min
+    .irrigationIntervalSec = (uint32_t)2 * 60, // 8 h
+    .irrigationDurationSec = (uint32_t) 1 * 60, // 5 min
     .irrigationPauseSec = (uint32_t)30, // 30 s
-    .txIntervalSec = (uint32_t) 5 * 60, // 5 * 60  // 5 min
+    .txIntervalSec = (uint32_t) 1 * 30, // 5 * 60  // 5 min
     .defaultSleepTimeSec = 1, // 1 s
-    .tensiometerMinPressure = 70.0f, // 70 mBar
+    .tensiometerMinPressure = 1000.0f, // 70 mBar
 };
-instance_data_t hochbeet_data = { &hochbeet_config, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, true, true, false };
+instance_data_t hochbeet_data = { &hochbeet_config, 0, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, true, true, false };
 static byte payload[20];
 
 
@@ -228,10 +239,15 @@ state_t do_state_read_sensors(instance_data_t *data) {
 
 
     // Water Tank @todo validate correct assignment
-    data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? false : true;
-
+    data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? true : false;
+    Serial.print("Status Water Tank Empty: ");
+    Serial.println(data->waterTankEmpty);
+    Serial.println();
     // Flower Pot @todo validate correct assignment
     data->flowerPotFull  = digitalRead(PIN_FLOWER_POT_FULL)  == 1 ? false : true;
+    Serial.print("Status Flower Pot Full: ");
+    Serial.println(data->flowerPotFull);
+    Serial.println();
 
 
     // Read tensiometer (soil moisture)
@@ -293,37 +309,43 @@ state_t do_state_send_data(instance_data_t *data) {
     if (data->waterTankEmpty) payload[13] |= 1 << 0;
     //if (data->waterTankEmpty) payload[13] |= 1 << 1;
 
+    #ifdef TTN
     // schedule sendjob
     os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(1), do_send);
+    #endif
 
     data->timeLastDataSent = getTime();
     return STANDBY;
 }
 
 state_t do_state_standby( instance_data_t *data ) {
+    Serial.println("do_state_standby");
         // Serial.print(" "); Serial.println(digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? true : false);
     #ifdef DEBUG1
+    Serial.print("Current Time: ");
     Serial.println(getTime());
+    Serial.print("Time Last Data Sent: ");
     Serial.println(data->timeLastDataSent);
-    Serial.println(data->config->txIntervalMs);
-    Serial.println(data->timeLastDataSent + data->config->txIntervalMs);
-    Serial.println(data->timeLastDataSent+ data->config->txIntervalMs-getTime());
-    delay(1000);
+    Serial.print("TX Intervall in Sec: ");
+    Serial.println(data->config->txIntervalSec);
+    Serial.print("Time next Data Sending: ");
+    Serial.println(data->timeLastDataSent + data->config->txIntervalSec);
+    Serial.print("Verbleibende Sekunden: ");
+    Serial.println(data->timeLastDataSent + data->config->txIntervalSec-getTime());
+    Serial.println();
     #endif
 
-    if(getTime() - data->config->txIntervalSec > data->timeLastDataSent  ) {
-    //if(getTime() > data->timeLastDataSent + data->config->txIntervalMs) {
+    if(getTime() > data->timeLastDataSent + data->config->txIntervalSec) {
         return READ_SENSORS;
     }
 
     // TODO
-    // DISABLED FOR M25 EXHIBITION
-    /*if(!data->waterTankEmpty
+    if(!data->waterTankEmpty
         && getTime() > data->timeLastIrrigationStart + data->config->irrigationIntervalSec
         && data->tensiometerPressure <= data->config->tensiometerMinPressure) {
             
         return PUMP_START;
-    }*/
+    }
 
     sleepForSeconds(data->config->defaultSleepTimeSec);
     return STANDBY;
@@ -353,21 +375,31 @@ state_t do_state_pump_run(instance_data_t *data) {
     data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? true : false;
 
     // Flower Pot @TODO validate correct assignment
-    data->flowerPotFull  = digitalRead(PIN_FLOWER_POT_FULL)  == 1 ? true : false;
+    data->flowerPotFull  = digitalRead(PIN_FLOWER_POT_FULL)  == 1 ? false : true;
 
     if( data->waterTankEmpty
         || data->flowerPotFull
-        || getTime() > data->timeLastPumpStart + data->config->irrigationIntervalSec) {
+        || getTime() > data->timeLastPumpStart + data->config->irrigationDurationSec) {
+            if(data->waterTankEmpty) {
+                Serial.println("EXIT: Water Tank Empty");
+            }
+            if(data->flowerPotFull) {
+                Serial.println("EXIT: Flower Pot Full");
+            }
+            if(getTime() > data->timeLastPumpStart + data->config->irrigationIntervalSec) {
+                Serial.println("EXIT: irrigationIntervalSec");
+            }
+
             return PUMP_STOP;
     }
 
-    return PUMP_RUN;   
+    return PUMP_RUN;
 }
 
 state_t do_state_pump_stop ( instance_data_t *data ) {
     Serial.println("do_state_pump_stop");
     pumpeStop();
-    
+    data->timeLastPumpStop = getTime();
 
     
     // Irrigation complete or water tank empty (has to be checked first!)
@@ -378,7 +410,7 @@ state_t do_state_pump_stop ( instance_data_t *data ) {
     }
 
     // Continue irrigation after pause
-    if(getTime() > data->timeLastPumpStart + data->config->irrigationIntervalSec + data->config->irrigationPauseSec
+    if(getTime() > data->timeLastPumpStop + data->config->irrigationPauseSec
         && getTime() < data->timeLastIrrigationStart + data->config->irrigationDurationSec) {
             return PUMP_START;
     }
@@ -548,7 +580,7 @@ void setup()
 
     // Serial.begin(115200);
     Serial.begin(9600);
-    delay(10000); //Backup Delay to transfer sketch
+    delay(5000); //Backup Delay to transfer sketch
 
     Serial.println(F("Starting"));
 #ifdef adaRTCLIB
@@ -638,7 +670,7 @@ void setup()
     //***********************
     //Interrupts for Sensors
     //***********************
-    pinMode(PIN_RELEASE_BUTTON, INPUT);
+    //pinMode(PIN_RELEASE_BUTTON, INPUT);
     pinMode(PIN_WATER_TANK_EMPTY, INPUT);
     pinMode(PIN_FLOWER_POT_FULL, INPUT);
     //   attachInterrupt(digitalPinToInterrupt(PIN_RELEASE_BUTTON), releaseInt, HIGH);
@@ -683,12 +715,14 @@ void setup()
 
     // Start first logic job here
     // os_setCallback(&logicjob, do_logic);
-
+#else
+os_init();
+os_setTimedCallback(&logicjob, os_getTime()+sec2osticks(1), do_logic);
 #endif
 
     //Testing LED ON (remove if Pump is connected )
-    setRelay(1);
-    digitalWrite(LED_BUILTIN, LOW);
+    //setRelay(1);
+    //digitalWrite(LED_BUILTIN, LOW);
 }
 
 //***************************
@@ -915,6 +949,7 @@ uint32_t getTime() {
  */
 void sleepForSeconds(int seconds)
 {
+    delay(seconds);
     return; // TODO
     // is there any critical job within sleep time?
     if(os_queryTimeCriticalJobs(sec2osticks(seconds)) == 1) {
@@ -949,12 +984,13 @@ void sleepForSeconds(int seconds)
 #endif
 
 #ifdef RTClock
-    deepSleepRTC(milliSeconds);
+    deepSleepRTC(seconds);
 #endif
 }
 
 #ifdef RTClock
-void deepSleepRTC(uint32_t sleepTimeInMilliSeconds) {
+void deepSleepRTC(uint32_t sleepTimeInSeconds) {
+    uint32_t sleepTimeInMilliSeconds = sleepTimeInSeconds * 1000;
     rtc.setAlarmEpoch(rtc.getEpoch() + sleepTimeInMilliSeconds);
     rtc.enableAlarm(rtc.MATCH_YYMMDDHHMMSS);
     rtc.attachInterrupt(alarmMatch);
