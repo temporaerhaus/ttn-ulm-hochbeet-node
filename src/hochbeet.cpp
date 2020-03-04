@@ -46,6 +46,11 @@ RTCZero rtc;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #endif
 
+#ifdef EPAPER
+#include "display.h"
+#endif
+
+
 #ifdef adaRTCLIB
 #include <RTClib.h>
 String getDate();
@@ -684,6 +689,14 @@ void setup()
     writeDisplay();
 #endif
 
+    //***************************
+    // Display
+    //***************************
+#ifdef EPAPER
+    setupDisplay();
+#endif
+
+
     //***********************
     // LMIC
     //***********************
@@ -730,7 +743,13 @@ os_setTimedCallback(&logicjob, os_getTime()+sec2osticks(1), do_logic);
 //***************************
 
 void loop() {
+
+    #ifdef EPAPER
+    loopDisplay();
+    #endif
+
     os_runloop_once();
+
 }
 
 /**
