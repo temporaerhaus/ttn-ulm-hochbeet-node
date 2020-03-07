@@ -41,7 +41,13 @@ RTCZero rtc1;
 #define OLED_RESET 4     // wird wohl bei diesem Display nicht
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #endif
+#ifdef adaRTCLIB
+#include <RTClib.h>
+String getDate();
+char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+RTC_DS3231 rtc1;
 
+#endif
 // declaring functions
 void onEvent(ev_t ev);
 void do_send(osjob_t *j);
@@ -361,7 +367,7 @@ void setup()
 
 #endif
 #ifdef DEBUG
-    Serial.println(rtc1.getEpoch());
+    //Serial.println(rtc1.getEpoch());
 #endif
 
 #ifdef OLED
@@ -486,7 +492,7 @@ void loop()
         {
             millisNow = millis();
             Serial.print("Current State: PumpeAn (");
-             Serial.print((millis() -millisNow);
+             Serial.print((millis() -millisNow));
              Serial.println(" s)");
         }
 
