@@ -63,16 +63,24 @@ void printdigit(int number);
 #include "config.h"
 bool joined = false;
 
-
 static osjob_t sendjob;
 const unsigned TX_INTERVAL = 150;
 
 // Adafruit Feather M0
-const lmic_pinmap lmic_pins = {
+/*const lmic_pinmap lmic_pins = {
     .nss = 8,
     .rxtx = LMIC_UNUSED_PIN,
     .rst = LMIC_UNUSED_PIN,
     .dio = {3, 6, LMIC_UNUSED_PIN},
+};*/
+
+// PIN MAP for MEGA
+
+const lmic_pinmap lmic_pins = {
+    .nss = 10,
+    .rxtx = LMIC_UNUSED_PIN,
+    .rst = 9,
+    .dio = {2, 6, 7},
 };
 
 // Pinmapping for Dragino Arduino shield
@@ -142,7 +150,7 @@ const float maxPressure = 500.0f;
 //using foor LOOP
 uint32_t millisNow = 0;
 uint32_t Irrigation_Interval = 30; //* 60 * 60  //  Hours
-uint32_t Irrigation_Duration = 5; // *60  //  Minutes
+uint32_t Irrigation_Duration = 5;  // *60  //  Minutes
 uint32_t Time_Last_Pump_Start = 0; //  ?? Value
 uint32_t Time_Last_Irrigation = 0;
 uint32_t Time_Last_Send = 0;
@@ -454,45 +462,46 @@ void setup()
 uint32_t secondsWriteDisplay = 0;
 uint32_t millisSentTTN = 0;
 int seconds = 0;
-uint32_t lastWrite=0;
-uint32_t currentTimestamp =0;
+uint32_t lastWrite = 0;
+uint32_t currentTimestamp = 0;
 void loop()
 {
     //delay(5000);
-  //  Serial.println(rtc1.getEpoch());
+    //  Serial.println(rtc1.getEpoch());
     currentTimestamp = rtc1.getEpoch();
-    
-    if ((currentTimestamp - lastWrite > 2)){
+
+    if ((currentTimestamp - lastWrite > 2))
+    {
         lastWrite = currentTimestamp;
         writeDisplay();
     }
     switch (state)
     {
     case PumpeAus:
-        state=Standby;
+        state = Standby;
         break;
 
     case PumpeAn:
-         if (millis() -millisNow>5000){
-         millisNow=millis();
-             Serial.print("Current State: PumpeAn (");
+        if (millis() - millisNow > 5000)
+        {
+            millisNow = millis();
+            Serial.print("Current State: PumpeAn (");
              Serial.print((millis() -millisNow);
              Serial.println(" s)");
-     }
-        
+        }
+
         if ((Flower_Pot_Full) || (Water_Tank_Empty) || (currentTimestamp - Time_Last_Pump_Start > Irrigation_Duration))
         {
             pumpeStop();
             state = PumpeAus;
             Serial.println("State: PumpeAn --> PumpeAus");
             Time_Last_Irrigation = currentTimestamp;
-           // Time_Last_Pump_Start = currentTimestamp;
+            // Time_Last_Pump_Start = currentTimestamp;
         }
-         
 
         break;
     case Standby:
-       
+
         if (currentTimestamp - secondsWriteDisplay > 10)
         {
             secondsWriteDisplay = currentTimestamp;
@@ -509,8 +518,8 @@ void loop()
             Serial.println("State: PumpeAus --> PumpeAn");
             break;
         }
-      //  delay(1000);
-    /*    Serial.print("Flower Pot full: ");
+        //  delay(1000);
+        /*    Serial.print("Flower Pot full: ");
         Serial.println(Flower_Pot_Full);
         Serial.print("Water Empty: ");
         Serial.println(Water_Tank_Empty);
@@ -519,18 +528,20 @@ void loop()
         Serial.print("Irrigation_Interval ");
         Serial.println(Irrigation_Interval);
       */
-     //  delay(2000);
-     if (millis() -millisNow>5000){
-         millisNow=millis();
-             Serial.print("Current State: Standby (");
-             Serial.print(currentTimestamp - Time_Last_Irrigation);
-             Serial.println(" s)");
-     }
+        //  delay(2000);
+        if (millis() - millisNow > 5000)
+        {
+            millisNow = millis();
+            Serial.print("Current State: Standby (");
+            Serial.print(currentTimestamp - Time_Last_Irrigation);
+            Serial.println(" s)");
+        }
         break;
     }
 
     // TTN SEND
-    if((state==PumpeAn)){
+    if ((state == PumpeAn))
+    {
         /*
             if (currentTimestamp - TimeStampLastSend > Sendeintervall)
             {   
@@ -539,11 +550,11 @@ void loop()
             }
 
         */
-    }else if (state==Standby)
+    }
+    else if (state == Standby)
     {
         //Code for sleep Mode
     }
-    
 
 //writeDisplay();
 #ifdef TTN
@@ -588,7 +599,7 @@ void loop()
 #ifdef TTN
     os_runloop_once();
 #endif
-/*
+    /*
 #ifdef OLED
     readSensors();
     writeDisplay();
@@ -678,7 +689,8 @@ void printdigit(int number)
 }
 #ifdef OLED
 void writeDisplay()
-{   readSensors();
+{
+    readSensors();
     int range = 0;
     display.clearDisplay();
     display.setCursor(1, 0);
@@ -846,7 +858,7 @@ void sleepForSeconds(int seconds)
  */
 void pumpeStart()
 {
-    
+
     setRelay(1);
     Time_Last_Pump_Start = currentTimestamp;
 }
