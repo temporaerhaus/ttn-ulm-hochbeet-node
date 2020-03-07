@@ -63,6 +63,7 @@ void printdigit(int number);
 #include "config.h"
 bool joined = false;
 
+
 static osjob_t sendjob;
 const unsigned TX_INTERVAL = 150;
 
