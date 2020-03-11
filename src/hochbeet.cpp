@@ -38,7 +38,7 @@ RTCZero rtc1;
 #include <Adafruit_SSD1306.h>
 #define SCREEN_WIDTH 128 // Pixelanzahl in der Breite
 #define SCREEN_HEIGHT 64 // Pixelanzahl in der Hoehoe
-#define OLED_RESET 4     // wird wohl bei diesem Display nicht
+#define OLED_RESET 40     // wird wohl bei diesem Display nicht
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #endif
 #ifdef adaRTCLIB
