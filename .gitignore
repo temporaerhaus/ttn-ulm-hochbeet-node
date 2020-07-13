@@ -7,3 +7,4 @@ src/config.h
 src/config.h
 src/test.h
 .piolibdeps
+ttn.h
