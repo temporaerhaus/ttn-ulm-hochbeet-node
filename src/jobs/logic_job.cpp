@@ -58,6 +58,8 @@ float readTensiometerPressure();
 float readTensiometerInternalWaterLevel();
 void printdigit(int number);
 uint32_t getTime();
+float readTankDistance();
+void quicksort(float number[20], int first, int last);
 
 
 
@@ -113,11 +115,18 @@ state_t do_state_read_sensors(instance_data_t *data) {
     // Read tensiometer (soil moisture)
     data->tensiometerPressure = readTensiometerPressure();
     Serial.print("Tensiometer ");
-    Serial.print(data->tensiometerPressure );
+    Serial.print(data->tensiometerPressure);
     Serial.println("");
 
     // No need for sub-mm accuracy
     data->tensiometerInternalWaterLevel = (uint8_t) round(readTensiometerInternalWaterLevel());
+
+    // Read distance sensor in water tank
+    data->tankDistance = readTankDistance();
+    Serial.print("Tank distance ");
+    Serial.print(data->tankDistance);
+    Serial.println("");
+
 
     return SEND_DATA;
 }
@@ -171,6 +180,11 @@ state_t do_state_send_data(instance_data_t *data) {
     payload[13] = 0;
     if (data->waterTankEmpty) payload[13] |= 1 << 0;
     //if (data->waterTankEmpty) payload[13] |= 1 << 1;
+
+    // tank distance
+    int tankDistance = round(data->tankDistance * 100); // is / 100 correct?
+    payload[14] = highByte(tankDistance);
+    payload[15] = lowByte(tankDistance);
 
     // Schedule transmission in 3s
     lora_job_send_status(payload);
@@ -441,4 +455,68 @@ void pumpeStop()
 void sleepForSeconds(int seconds)
 {
     // temporary disabled
+}
+
+float readTankDistance()
+{
+    int triggerPin = 2;
+    int echoPin = 3;
+
+    int numberOfSamples = 20;
+
+    // clear trigger pin
+    digitalWrite(triggerPin, 0);
+    delayMicroseconds(10);
+
+    float measurements[numberOfSamples];
+
+    float duration, distance;
+    for (uint8_t i = 0; i < numberOfSamples; i++) {
+
+        // trigger sensor
+        digitalWrite(triggerPin, 1);
+        delayMicroseconds(100); // = 1ms
+        digitalWrite(triggerPin, 0);
+
+        // calculate distance via duration
+        duration = pulseIn(echoPin, 1);
+        distance = duration * 0.032/2;
+
+        measurements[i] = distance;
+    }
+
+    // calculate median
+    quicksort(measurements, 0, numberOfSamples-1);
+    float median = measurements[numberOfSamples / 2];
+
+    return median;
+}
+
+void quicksort(float number[], int first, int last){
+   int i, j, pivot, temp;
+
+   if(first<last){
+      pivot=first;
+      i=first;
+      j=last;
+
+      while(i<j){
+         while(number[i]<=number[pivot]&&i<last)
+            i++;
+         while(number[j]>number[pivot])
+            j--;
+         if(i<j){
+            temp=number[i];
+            number[i]=number[j];
+            number[j]=temp;
+         }
+      }
+
+      temp=number[pivot];
+      number[pivot]=number[j];
+      number[j]=temp;
+      quicksort(number,first,j-1);
+      quicksort(number,j+1,last);
+
+   }
 }
