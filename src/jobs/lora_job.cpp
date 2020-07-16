@@ -17,10 +17,16 @@
 #include "config/pinmaps/arduinomega.h"
 #endif
 #include <config/ttn.h>
-#include "logic_job.h"
 
 static osjob_t lorajob;
 static byte currentPayload[PAYLOAD_SIZE] = {0};
+
+
+
+void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);}
+void os_getArtEui (u1_t* buf) { memcpy_P(buf, APPEUI, 8);}
+void os_getDevKey (u1_t* buf) { memcpy_P(buf, APPKEY, 16);}
+
 
 void printHex2(unsigned v) {
     v &= 0xff;

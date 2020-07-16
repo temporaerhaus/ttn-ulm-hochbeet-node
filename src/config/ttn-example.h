@@ -2,8 +2,10 @@
 
 
 
-
 // RENAME TO ttn.h
+
+// FILL IN YOUR TTN DREDENTIALS
+
 
 
 
@@ -15,7 +17,7 @@
 const static uint8_t PAYLOAD_SIZE = 20;
 
 #ifdef OTAA
-//Put in OTAA TTN Credentials device 2
+//Put in OTAA TTN Credentials
 // lsb
 static const u1_t PROGMEM DEVEUI[8]= { };
 void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);}
@@ -31,14 +33,17 @@ void os_getDevKey (u1_t* buf) {  memcpy_P(buf, APPKEY, 16);}
 #else
 // PUT ABP TTN Credentials Here
 
-// 2. Insert your "Network Session Key" in hex  format, e.g., {0x12, 0x34 ...}
+// 2. Insert your "Network Session Key" in hex  format, e.g., {0x12, 0x34 ...} in msb
 static const PROGMEM u1_t NWKSKEY[16] = {  };
-// 3. "App Session Key" in hex msb format, e.g., {0x12, 0x34 ...}
+// 3. "App Session Key" in hex msb format, e.g., {0x12, 0x34 ...} in msb
 static const u1_t PROGMEM APPSKEY[16] = {  };
-// 4. "Device Address" not in msb, just in hex format, e.g., 0x123456AB
+// 4. "Device Address" in msb, but in hex format, e.g., 0x123456AB
 static const u4_t DEVADDR = 0x123456AB;
 
+// Leave empty, only used for OTAA
+static const u1_t PROGMEM DEVEUI[8]= { };
+static const u1_t PROGMEM APPEUI[8]= { };
+static const u1_t PROGMEM APPKEY[16] = { };
+
 #endif
-
-
 #endif
