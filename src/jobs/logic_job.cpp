@@ -36,7 +36,23 @@ typedef enum {
 // unpretty workaround to access state ojects within LMIC OS jobs
 state_t cur_state; // set initial state to READ_SENSORS
 
-instance_data_t hochbeet_data = { &hochbeet_config, 0, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, true, true, false };
+instance_data_t hochbeet_data = {
+        &hochbeet_config,
+        0,
+        0,
+        0,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,  // tank distance
+        0,
+        0,
+        true,
+        true,
+        false,
+        true   // bme available
+};
 
 
 typedef state_t state_func_t( instance_data_t *data );
@@ -86,18 +102,25 @@ state_t run_state( state_t cur_state, instance_data_t *data ) {
 state_t do_state_read_sensors(instance_data_t *data) {
     Serial.println("do_state_read_sensors");
 
-    bme.takeForcedMeasurement();
-    data->temperature = bme.readTemperature();
-    data->humidity = bme.readHumidity();
-    data->airPressure = bme.readPressure();
-
-    Serial.print("Temp: ");
-    Serial.print(data->temperature);
-    Serial.print(" C\t Hum: ");
-    Serial.print(data->humidity);
-    Serial.print(" %\t Pressure: ");
-    Serial.print(data->airPressure );
-    Serial.println("hpa");
+    if (data->bmeAvailable) {
+        Serial.println("Reading BME sensor values.");
+        bme.takeForcedMeasurement();
+        data->temperature = bme.readTemperature();
+        data->humidity = bme.readHumidity();
+        data->airPressure = bme.readPressure();
+        Serial.print("Temp: ");
+        Serial.print(data->temperature);
+        Serial.print(" C\t Hum: ");
+        Serial.print(data->humidity);
+        Serial.print(" %\t Pressure: ");
+        Serial.print(data->airPressure );
+        Serial.println("hpa");
+    } else {
+        data->temperature = -273.16;
+        data->humidity = -1;
+        data->airPressure = -1;
+        Serial.println("No BME sensor available. Not reading data from it.");
+    }
 
     // Water Tank @todo validate correct assignment
     data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? true : false;
@@ -316,10 +339,21 @@ void logic_job_init() {
     //***********************
     // BME280
     //***********************
-    if (!bme.begin(BME_ADDR))
-    {
-        Serial.println("Could not find a valid BME280 sensor, check wiring!");
-        while (1) ; // @todo – sinnvoll? Pflanzen vertrocken lassen, weil Temperatur-Sensor nicht geht?
+    int maxTries = 3; int tries = 0;
+    if (!bme.begin(BME_ADDR)) {
+        Serial.println("Could not find a valid BME280 sensor, check wiring! Trying a few times...");
+        Serial.printf("Try ");
+        while (tries <= maxTries) {
+            Serial.printf("%d...", tries);
+            delay(200);
+            tries++;
+            if (tries >= maxTries) {
+                Serial.println("\n\rThis is not working. Giving up. NOT using BME sensor.");
+                tries = 0;
+                hochbeet_data.bmeAvailable = false;
+                break;
+            };
+        }
     }
 
     // Set BME in force mode to reduce power consumption

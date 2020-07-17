@@ -31,6 +31,7 @@ typedef struct {
     boolean             waterTankEmpty;
     boolean             flowerPotFull;
     boolean             irrigationRunning;
+    boolean             bmeAvailable;
 } instance_data_t ;
 
 void logic_job_init(void);
