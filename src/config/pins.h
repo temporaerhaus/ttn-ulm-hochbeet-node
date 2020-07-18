@@ -8,8 +8,8 @@
 #define PIN_WATER_TANK_EMPTY 12 //Tank (A4)
 #define PIN_FLOWER_POT_FULL 13  //flowers
 #define PIN_RELAY A5
-#define PIN_TANK_DISTANCE_TRIGGER = 2;
-#define PIN_TANK_DISTANCE_ECHO = 3;
+#define PIN_TANK_DISTANCE_TRIGGER 2
+#define PIN_TANK_DISTANCE_ECHO 3
 
 
 
