@@ -36,21 +36,22 @@ typedef enum {
 // unpretty workaround to access state ojects within LMIC OS jobs
 state_t cur_state; // set initial state to READ_SENSORS
 
+// default values for the data object
 instance_data_t hochbeet_data = {
         &hochbeet_config,
-        0,
-        0,
-        0,
-        0.0f,
-        0.0f,
-        0.0f,
-        0.0f,
+        0,     // time; last time the pump was started
+        0,     // time; last time the pump was stopped
+        0,     // time; last time the irrigation was started
+        0.0f,  // temperature (bme280)
+        0.0f,  // humidity (bme280)
+        0.0f,  // air pressure (bme280)
+        0.0f,  // tensio meter pressure
         0.0f,  // tank distance
-        0,
-        0,
-        true,
-        true,
-        false,
+        0,     // time; last time data was sent via lorawan
+        0,     // internal water level of the tensiometer
+        false,  // is water tank empty
+        false,  // is the bed full of water
+        false, // is the irrigation running
         true   // bme available
 };
 
@@ -113,7 +114,7 @@ state_t do_state_read_sensors(instance_data_t *data) {
         Serial.print(" C\t Hum: ");
         Serial.print(data->humidity);
         Serial.print(" %\t Pressure: ");
-        Serial.print(data->airPressure );
+        Serial.print(data->airPressure);
         Serial.println("hpa");
     } else {
         data->temperature = -273.16;
@@ -145,6 +146,7 @@ state_t do_state_read_sensors(instance_data_t *data) {
     data->tensiometerInternalWaterLevel = (uint8_t) round(readTensiometerInternalWaterLevel());
 
     // Read distance sensor in water tank
+    Serial.print("Reading tank distance...");
     data->tankDistance = readTankDistance();
     Serial.print("Tank distance ");
     Serial.print(data->tankDistance);
@@ -321,7 +323,7 @@ state_t do_state_pump_stop ( instance_data_t *data ) {
 
 
 void do_logic(osjob_t *j) {
-    cur_state = run_state( cur_state, &hochbeet_data );
+    cur_state = run_state(cur_state, &hochbeet_data);
 
     // Start next logic job here
     os_setTimedCallback(&logicjob, os_getTime()+sec2osticks(hochbeet_data.config->defaultSleepTimeSec), do_logic);
@@ -491,15 +493,11 @@ void sleepForSeconds(int seconds)
     // temporary disabled
 }
 
-float readTankDistance()
-{
-    int triggerPin = 2;
-    int echoPin = 3;
-
+float readTankDistance() {
     int numberOfSamples = 20;
 
     // clear trigger pin
-    digitalWrite(triggerPin, 0);
+    digitalWrite(PIN_TANK_DISTANCE_TRIGGER, 0);
     delayMicroseconds(10);
 
     float measurements[numberOfSamples];
@@ -508,12 +506,12 @@ float readTankDistance()
     for (uint8_t i = 0; i < numberOfSamples; i++) {
 
         // trigger sensor
-        digitalWrite(triggerPin, 1);
+        digitalWrite(PIN_TANK_DISTANCE_TRIGGER, 1);
         delayMicroseconds(100); // = 1ms
-        digitalWrite(triggerPin, 0);
+        digitalWrite(PIN_TANK_DISTANCE_TRIGGER, 0);
 
         // calculate distance via duration
-        duration = pulseIn(echoPin, 1);
+        duration = pulseIn(PIN_TANK_DISTANCE_ECHO, 1);
         distance = duration * 0.032/2;
 
         measurements[i] = distance;
