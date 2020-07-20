@@ -6,7 +6,8 @@
 #include "config/pins.h"
 #include <RTCZero.h>
 #include <VL6180X.h>
-
+#include <Adafruit_ADS1015.h>
+Adafruit_ADS1115 ads ;
 
 
 static osjob_t logicjob;
@@ -370,6 +371,12 @@ void logic_job_init() {
                     Adafruit_BME280::SAMPLING_X1, // humidity
                     Adafruit_BME280::FILTER_OFF);
 
+    //**********************
+    // ADS1115
+    //**********************
+    ads.begin();
+    ads.startComparator_SingleEnded(0, 1000);
+    
     //***********************
     // RELAYS
     //***********************
@@ -441,7 +448,9 @@ void setRelay(int state)
  */
 float readTensiometerPressure()
 {
-    int rawValue = analogRead(TENSIOMETER_PRESSURE_PIN); // read the input pin
+    //int rawValue = analogRead(TENSIOMETER_PRESSURE_PIN); // read the input pin
+    //ADS bei 5,1 V 27xxx als Wert (xxx sindgerade nicht genau im Kopf)
+    int rawValue = ads.readADC_SingleEnded(0);
     float tensiometerPressure;
     // @todo auf 3V runterbrechen
     float voltage = (float)rawValue * (5.0 / 1023.0);
