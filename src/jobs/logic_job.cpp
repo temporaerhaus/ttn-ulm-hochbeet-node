@@ -125,7 +125,7 @@ state_t do_state_read_sensors(instance_data_t *data) {
     }
 
     // Water Tank @todo validate correct assignment
-    data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? true : false;
+    data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 0 ? true : false;
     Serial.print("Status Water Tank Empty: ");
     Serial.println(data->waterTankEmpty);
     Serial.println();
