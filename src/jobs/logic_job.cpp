@@ -48,6 +48,7 @@ instance_data_t hochbeet_data = {
         0.0f,  // air pressure (bme280)
         0.0f,  // tensio meter pressure
         0.0f,  // tank distance
+        0.0f,  // watertank pressure 
         0,     // time; last time data was sent via lorawan
         0,     // internal water level of the tensiometer
         false,  // is water tank empty
@@ -73,6 +74,7 @@ void pumpeStart();
 void pumpeStop();
 void writeDisplay();
 float readTensiometerPressure();
+float readWatertankPressure();
 float readTensiometerInternalWaterLevel();
 void printdigit(int number);
 uint32_t getTime();
@@ -125,13 +127,13 @@ state_t do_state_read_sensors(instance_data_t *data) {
     }
 
     // Water Tank @todo validate correct assignment
-    data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 0 ? true : false;
+    data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? false : true;
     Serial.print("Status Water Tank Empty: ");
     Serial.println(data->waterTankEmpty);
     Serial.println();
 
     // Flower Pot @todo validate correct assignment
-    data->flowerPotFull  = digitalRead(PIN_FLOWER_POT_FULL)  == 1 ? false : true;
+    data->flowerPotFull  = digitalRead(PIN_FLOWER_POT_FULL)  == 1 ? true : false;
     Serial.print("Status Flower Pot Full: ");
     Serial.println(data->flowerPotFull);
     Serial.println();
@@ -141,6 +143,12 @@ state_t do_state_read_sensors(instance_data_t *data) {
     data->tensiometerPressure = readTensiometerPressure();
     Serial.print("Tensiometer ");
     Serial.print(data->tensiometerPressure);
+    Serial.println("");
+
+// Read watertank Pressure
+    data->watertankPressure = readWatertankPressure();
+    Serial.print("WassertankDruck ");
+    Serial.print(data->watertankPressure);
     Serial.println("");
 
     // No need for sub-mm accuracy
@@ -211,7 +219,10 @@ state_t do_state_send_data(instance_data_t *data) {
     int tankDistance = round(data->tankDistance * 100); // is / 100 correct?
     payload[14] = highByte(tankDistance);
     payload[15] = lowByte(tankDistance);
-
+    int watertankPressure = round(data->watertankPressure);
+    payload[16] = highByte(watertankPressure);
+    payload[17] = lowByte(watertankPressure);
+    
     // Schedule transmission in 3s
     lora_job_send_status(payload);
 
@@ -275,7 +286,7 @@ state_t do_state_pump_start( instance_data_t *data ) {
 state_t do_state_pump_run(instance_data_t *data) {
     Serial.println("do_state_pump_run");
     // Water Tank @TODO validate correct assignment
-    data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? true : false;
+    data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 0 ? true : false;
 
     // Flower Pot @TODO validate correct assignment
     data->flowerPotFull  = digitalRead(PIN_FLOWER_POT_FULL)  == 1 ? false : true;
@@ -468,6 +479,29 @@ float readTensiometerPressure()
     Serial.println(" ");
 #endif
     return tensiometerPressure;
+}
+float readWatertankPressure()
+{
+    //int rawValue = analogRead(TENSIOMETER_PRESSURE_PIN); // read the input pin
+    //ADS bei 5,1 V 27xxx als Wert (xxx sindgerade nicht genau im Kopf)
+    int rawValue = ads.readADC_SingleEnded(1);
+    float watertankPressure;
+    // @todo runterbrechen auf ADS1115 mit 5V anpassen
+    float voltage = (float)rawValue * (5.0 / 1023.0);
+    voltage = (voltage < VminTyp) ? VminTyp : voltage;
+    watertankPressure = 1.0 / VrangeTyp * (voltage - VminTyp) * maxPressure;
+
+#ifdef DEBUG
+    Serial.print(rawValue);
+    Serial.print(" / ");
+    Serial.print(voltage);
+    Serial.print(" V");
+    Serial.print(" / ");
+    Serial.print(watertankPressure);
+    Serial.print(" kPa  ");
+    Serial.println(" ");
+#endif
+    return watertankPressure;
 }
 
 /**
