@@ -7,7 +7,7 @@
 #include <RTCZero.h>
 #include <VL6180X.h>
 #include <Adafruit_ADS1015.h>
-Adafruit_ADS1115 ads ;
+Adafruit_ADS1115 ads ; // (default gain = 2/3x to read +/- 6.144V  1 bit = 3mV)
 
 
 static osjob_t logicjob;
@@ -457,14 +457,12 @@ void setRelay(int state)
  * Reads to inner pressure of the tensiometer which
  * indicates how moist the soil is. 
  */
-float readTensiometerPressure()
-{
-    //int rawValue = analogRead(TENSIOMETER_PRESSURE_PIN); // read the input pin
-    //ADS bei 5,1 V 27xxx als Wert (xxx sindgerade nicht genau im Kopf)
+float readTensiometerPressure() {
+    // We use external  16 Bit ADC ADS1115. It has an resolution of 188uV/bit
     int rawValue = ads.readADC_SingleEnded(0);
     float tensiometerPressure;
-    // @todo auf 3V runterbrechen
-    float voltage = (float)rawValue * (5.0 / 1023.0);
+    float voltage = rawValue * 188.0f / 1000000.0f;
+
     voltage = (voltage < VminTyp) ? VminTyp : voltage;
     tensiometerPressure = 1.0 / VrangeTyp * (voltage - VminTyp) * maxPressure;
 
@@ -480,6 +478,7 @@ float readTensiometerPressure()
 #endif
     return tensiometerPressure;
 }
+
 float readWatertankPressure()
 {
     //int rawValue = analogRead(TENSIOMETER_PRESSURE_PIN); // read the input pin
