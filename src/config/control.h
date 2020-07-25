@@ -15,4 +15,25 @@ hochbeet_config_t hochbeet_config = {
     .tensiometerMinPressure = 70.0f, // 70 mBar
 };
 
+// config soil moistore tensiometer
+// https://www.fujikura.co.jp/eng/products/electronics/sensors/04/2052856_13675.html
+// Fujikura AP20R-500KV
+tensiometer_config_t tensiometer_config_soil_moistor = {
+    .VminTyp = 0.2f,
+    .VmaxTyp = 4.7f,
+    .VrangeTyp = 4.5f,
+    .maxPressure = 500.0f, // mBar
+};
+
+// config water tank tensiometer
+// https://www.metrodynemems.com/proimages/product/PDF/MIS-2500series.pdf
+// MIS-2500-015G
+tensiometer_config_t tensiometer_config_water_tank = {
+    .VminTyp = 0.25f,
+    .VmaxTyp = 4.75f,
+    .VrangeTyp = 4.5f,
+    .maxPressure = 1034.21f, // mBar
+};
+
+
 #endif

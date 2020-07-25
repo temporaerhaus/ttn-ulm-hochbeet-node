@@ -35,6 +35,16 @@ typedef struct {
     boolean             bmeAvailable;
 } instance_data_t ;
 
+
+// tensiometer config
+typedef struct {
+    float   VminTyp,
+            VmaxTyp,
+            VrangeTyp,
+            maxPressure;
+} tensiometer_config_t ;
+
+
 void logic_job_init(void);
 
 #endif

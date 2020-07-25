@@ -18,12 +18,6 @@ const int BME_ADDR = 0x76; // use address 0x77 (default) or 0x76
 VL6180X s_vlx6180; // I2C, Pololu VL6180X Time-of-Flight Distance Sensor adress 0x29
 RTCZero rtc;
 
-// tensiometer config
-const float VminTyp = 0.2f;
-const float VmaxTyp = 4.7f;
-const float VrangeTyp = VmaxTyp - VminTyp;
-const float maxPressure = 500.0f;
-
 // Enum holds name of states
 typedef enum { 
     READ_SENSORS,
@@ -463,8 +457,8 @@ float readTensiometerPressure() {
     float tensiometerPressure;
     float voltage = rawValue * 188.0f / 1000000.0f;
 
-    voltage = (voltage < VminTyp) ? VminTyp : voltage;
-    tensiometerPressure = 1.0 / VrangeTyp * (voltage - VminTyp) * maxPressure;
+    voltage = (voltage < tensiometer_config_soil_moistor.VminTyp) ? tensiometer_config_soil_moistor.VminTyp : voltage;
+    tensiometerPressure = 1.0 / tensiometer_config_soil_moistor.VrangeTyp * (voltage - tensiometer_config_soil_moistor.VminTyp) * tensiometer_config_soil_moistor.maxPressure;
 
 #ifdef DEBUG
     Serial.print(rawValue);
@@ -479,16 +473,17 @@ float readTensiometerPressure() {
     return tensiometerPressure;
 }
 
+
 float readWatertankPressure()
 {
-    //int rawValue = analogRead(TENSIOMETER_PRESSURE_PIN); // read the input pin
-    //ADS bei 5,1 V 27xxx als Wert (xxx sindgerade nicht genau im Kopf)
+    // We use external  16 Bit ADC ADS1115. It has an resolution of 188uV/bit
     int rawValue = ads.readADC_SingleEnded(1);
     float watertankPressure;
-    // @todo runterbrechen auf ADS1115 mit 5V anpassen
-    float voltage = (float)rawValue * (5.0 / 1023.0);
-    voltage = (voltage < VminTyp) ? VminTyp : voltage;
-    watertankPressure = 1.0 / VrangeTyp * (voltage - VminTyp) * maxPressure;
+    float voltage = rawValue * 188.0f / 1000000.0f;
+
+    voltage = (voltage < tensiometer_config_water_tank.VminTyp) ? tensiometer_config_water_tank.VminTyp : voltage;
+    watertankPressure = 1.0 / tensiometer_config_water_tank.VrangeTyp * (voltage - tensiometer_config_water_tank.VminTyp) * tensiometer_config_water_tank.maxPressure;
+
 
 #ifdef DEBUG
     Serial.print(rawValue);
