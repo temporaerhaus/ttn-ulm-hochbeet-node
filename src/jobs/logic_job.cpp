@@ -48,7 +48,8 @@ instance_data_t hochbeet_data = {
         false,  // is water tank empty
         false,  // is the bed full of water
         false, // is the irrigation running
-        true   // bme available
+        true,  // bme available
+        false  // was the bed watered on the last cycle
 };
 
 
@@ -206,8 +207,13 @@ state_t do_state_send_data(instance_data_t *data) {
 
     // bools
     payload[13] = 0;
-    if (data->waterTankEmpty) payload[13] |= 1 << 0;
-    //if (data->waterTankEmpty) payload[13] |= 1 << 1;
+    if (data->waterTankEmpty)  {
+        payload[13] |= 1 << 0;
+    }
+    if (data->wasWateredOnLastCycle)  {
+        payload[13] |= 1 << 1;
+        data->wasWateredOnLastCycle = false; // reset value
+    }
 
     // tank distance
     int tankDistance = round(data->tankDistance * 100); // is / 100 correct?
@@ -216,11 +222,13 @@ state_t do_state_send_data(instance_data_t *data) {
     int watertankPressure = round(data->watertankPressure);
     payload[16] = highByte(watertankPressure);
     payload[17] = lowByte(watertankPressure);
-    
+
     // Schedule transmission in 3s
     lora_job_send_status(payload);
 
     data->timeLastDataSent = getTime();
+
+
 
     return STANDBY;
 }
@@ -250,7 +258,6 @@ state_t do_state_standby( instance_data_t *data ) {
     if(!data->waterTankEmpty
         && getTime() > data->timeLastIrrigationStart + data->config->irrigationIntervalSec
         && data->tensiometerPressure <= data->config->tensiometerMinPressure) {
-            
         return PUMP_START;
     }
 
@@ -266,6 +273,7 @@ state_t do_state_pump_start( instance_data_t *data ) {
     // consists of multiple irrigation intervalls)
     if(!data->irrigationRunning) {
         data->irrigationRunning = true;
+        data->wasWateredOnLastCycle = true;
         data->timeLastIrrigationStart = getTime();
     }
 

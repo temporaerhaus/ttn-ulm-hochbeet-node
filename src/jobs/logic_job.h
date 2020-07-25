@@ -33,6 +33,7 @@ typedef struct {
     boolean             flowerPotFull;
     boolean             irrigationRunning;
     boolean             bmeAvailable;
+    boolean             wasWateredOnLastCycle;
 } instance_data_t ;
 
 
