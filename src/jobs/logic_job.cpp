@@ -122,7 +122,8 @@ state_t do_state_read_sensors(instance_data_t *data) {
     }
 
     // Water Tank @todo validate correct assignment
-    data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? false : true;
+    //data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? false : true;
+    data->waterTankEmpty = false;
     Serial.print("Status Water Tank Empty: ");
     Serial.println(data->waterTankEmpty);
     Serial.println();
@@ -256,8 +257,8 @@ state_t do_state_standby( instance_data_t *data ) {
 
     // TODO
     if(!data->waterTankEmpty
-        && getTime() > data->timeLastIrrigationStart + data->config->irrigationIntervalSec
-        && data->tensiometerPressure <= data->config->tensiometerMinPressure) {
+        && (data->timeLastIrrigationStart == 0 || getTime() > data->timeLastIrrigationStart + data->config->irrigationIntervalSec)
+        && data->tensiometerPressure >= data->config->tensiometerMinPressure) {
         return PUMP_START;
     }
 
@@ -288,10 +289,12 @@ state_t do_state_pump_start( instance_data_t *data ) {
 state_t do_state_pump_run(instance_data_t *data) {
     Serial.println("do_state_pump_run");
     // Water Tank @TODO validate correct assignment
-    data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 0 ? true : false;
+    //data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? false : true;
+    data->waterTankEmpty = false;
 
     // Flower Pot @TODO validate correct assignment
-    data->flowerPotFull  = digitalRead(PIN_FLOWER_POT_FULL)  == 1 ? false : true;
+    //data->flowerPotFull  = digitalRead(PIN_FLOWER_POT_FULL)  == 1 ? true : false;
+    data->flowerPotFull = false;
 
     if( data->waterTankEmpty
         || data->flowerPotFull
@@ -478,7 +481,7 @@ float readTensiometerPressure() {
     Serial.print(" kPa  ");
     Serial.println(" ");
 #endif
-    return tensiometerPressure;
+    return 100.0f;
 }
 
 
