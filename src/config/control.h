@@ -10,7 +10,7 @@ hochbeet_config_t hochbeet_config = {
     .irrigationIntervalSec = (uint32_t) 6 * 60 * 60, // 8 h
     .irrigationDurationSec = (uint32_t) 1 * 45, // 5 min
     .irrigationPauseSec = (uint32_t) 30, // 30 s
-    .txIntervalSec = (uint32_t) 5 * 60, // 5 min
+    .txIntervalSec = (uint32_t) 10 * 60, // 5 min
     .defaultSleepTimeSec = 1, // 1 s
     .tensiometerMinPressure = 70.0f, // 70 mBar
 };
