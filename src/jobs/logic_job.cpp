@@ -122,15 +122,14 @@ state_t do_state_read_sensors(instance_data_t *data) {
         Serial.println("No BME sensor available. Not reading data from it.");
     }
 
-    // Water Tank @todo validate correct assignment
-    //data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? false : true;
-    data->waterTankEmpty = false;
+    // Water Tank @todo validate correct assignment (the nail sensor)
+    data->waterTankEmpty = read_water_tank_status();
     Serial.print("Status Water Tank Empty: ");
     Serial.println(data->waterTankEmpty);
     Serial.println();
 
     // Flower Pot @todo validate correct assignment
-    data->flowerPotFull  = digitalRead(PIN_FLOWER_POT_FULL)  == 1 ? true : false;
+    data->flowerPotFull  = read_flower_pot_status();
     Serial.print("Status Flower Pot Full: ");
     Serial.println(data->flowerPotFull);
     Serial.println();
@@ -142,7 +141,7 @@ state_t do_state_read_sensors(instance_data_t *data) {
     Serial.print(data->tensiometerPressure);
     Serial.println("");
 
-// Read watertank Pressure
+    // Read watertank Pressure
     data->watertankPressure = readWatertankPressure();
     Serial.print("WassertankDruck ");
     Serial.print(data->watertankPressure);

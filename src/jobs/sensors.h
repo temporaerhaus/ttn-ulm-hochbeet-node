@@ -1,10 +1,10 @@
-#ifndef READER_H
-#define READER_H
+#ifndef SENSORS_H
+#define SENSORS_H
 
-#include <Arduino.h>
-
-bool read_water_tank_float_sensor();
 float read_tank_distance_sensor();
+bool read_water_tank_status();
+bool read_flower_pot_status();
+float read_watertank_pressure();
 bool quicksort();
 
 #endif

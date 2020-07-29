@@ -1,17 +1,9 @@
 #include "sensors.h"
+#include "config/control.h"
 #include "config/pins.h"
+#include <Adafruit_ADS1015.h>
 
 void quicksort(float number[20], int first, int last);
-
-bool read_water_tank_float_sensor() {
-    #ifdef TESTMODE
-    Serial.println("Reading water tank float sensor in TESTMODE.");
-    return false;
-    #else
-    return digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? true : false;
-    #endif
-}
-
 
 float read_tank_distance_sensor() {
     #ifdef TESTMODE
@@ -40,17 +32,17 @@ float read_tank_distance_sensor() {
 
         measurements[i] = distance;
     }
-    Serial.print('[DEBUG] Distance measurements took ');
+    Serial.print("[DEBUG] Distance measurements took ");
     Serial.println(start - millis());
 
     // calculate median
     start = millis();
     quicksort(measurements, 0, numberOfSamples-1);
-    Serial.print('[DEBUG] Distance quicksort took ');
+    Serial.print("[DEBUG] Distance quicksort took ");
     Serial.println(start - millis());
 
     float median = measurements[numberOfSamples / 2];
-    Serial.print('Median for tank distance: ');
+    Serial.print("Median for tank distance: ");
     Serial.println(median);
     return median;
     #endif
@@ -83,4 +75,46 @@ void quicksort(float number[], int first, int last){
         quicksort(number,j+1,last);
 
     }
+}
+
+boolean read_water_tank_status() {
+    #ifdef TESTMODE
+    Serial.println("Reading water tank nail sensor in TESTMODE. Returning false.");
+    return false;
+    #else
+    return digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? false : true;
+    #endif
+
+}
+
+boolean read_flower_pot_status(){
+    #ifdef TESTMODE
+    Serial.println("Reading flower pot sensor in TESTMODE. Returning false (not full).");
+    return false;
+    #else
+    return digitalRead(PIN_FLOWER_POT_FULL)  == 1 ? true : false;
+    #endif
+}
+
+float read_watertank_pressure(Adafruit_ADS1115& ads) {
+    // We use external  16 Bit ADC ADS1115. It has an resolution of 188uV/bit
+    int rawValue = ads.readADC_SingleEnded(1);
+    float watertankPressure;
+    float voltage = rawValue * 188.0f / 1000000.0f;
+
+    voltage = (voltage < tensiometer_config_water_tank.VminTyp) ? tensiometer_config_water_tank.VminTyp : voltage;
+    watertankPressure = 1.0 / tensiometer_config_water_tank.VrangeTyp * (voltage - tensiometer_config_water_tank.VminTyp) * tensiometer_config_water_tank.maxPressure;
+
+
+    #ifdef DEBUG
+    Serial.print(rawValue);
+    Serial.print(" / ");
+    Serial.print(voltage);
+    Serial.print(" V");
+    Serial.print(" / ");
+    Serial.print(watertankPressure);
+    Serial.print(" kPa  ");
+    Serial.println(" ");
+    #endif
+    return watertankPressure;
 }
