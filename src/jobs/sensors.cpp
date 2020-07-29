@@ -1,5 +1,4 @@
 #include "sensors.h"
-#include "config/control.h"
 #include "config/pins.h"
 #include <Adafruit_ADS1015.h>
 
@@ -96,25 +95,25 @@ boolean read_flower_pot_status(){
     #endif
 }
 
-float read_watertank_pressure(Adafruit_ADS1115& ads) {
-    // We use external  16 Bit ADC ADS1115. It has an resolution of 188uV/bit
-    int rawValue = ads.readADC_SingleEnded(1);
-    float watertankPressure;
-    float voltage = rawValue * 188.0f / 1000000.0f;
-
-    voltage = (voltage < tensiometer_config_water_tank.VminTyp) ? tensiometer_config_water_tank.VminTyp : voltage;
-    watertankPressure = 1.0 / tensiometer_config_water_tank.VrangeTyp * (voltage - tensiometer_config_water_tank.VminTyp) * tensiometer_config_water_tank.maxPressure;
-
-
-    #ifdef DEBUG
-    Serial.print(rawValue);
-    Serial.print(" / ");
-    Serial.print(voltage);
-    Serial.print(" V");
-    Serial.print(" / ");
-    Serial.print(watertankPressure);
-    Serial.print(" kPa  ");
-    Serial.println(" ");
-    #endif
-    return watertankPressure;
-}
+//float read_watertank_pressure(Adafruit_ADS1115& ads) {
+//    // We use external  16 Bit ADC ADS1115. It has an resolution of 188uV/bit
+//    int rawValue = ads.readADC_SingleEnded(1);
+//    float watertankPressure;
+//    float voltage = rawValue * 188.0f / 1000000.0f;
+//
+//    voltage = (voltage < tensiometer_config_water_tank.VminTyp) ? tensiometer_config_water_tank.VminTyp : voltage;
+//    watertankPressure = 1.0 / tensiometer_config_water_tank.VrangeTyp * (voltage - tensiometer_config_water_tank.VminTyp) * tensiometer_config_water_tank.maxPressure;
+//
+//
+//    #ifdef DEBUG
+//    Serial.print(rawValue);
+//    Serial.print(" / ");
+//    Serial.print(voltage);
+//    Serial.print(" V");
+//    Serial.print(" / ");
+//    Serial.print(watertankPressure);
+//    Serial.print(" kPa  ");
+//    Serial.println(" ");
+//    #endif
+//    return watertankPressure;
+//}
