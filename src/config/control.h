@@ -12,7 +12,7 @@ hochbeet_config_t hochbeet_config = {
     .irrigationPauseSec = (uint32_t) 30, // 30 s
     .txIntervalSec = (uint32_t) 10 * 60, // 5 min
     .defaultSleepTimeSec = 1, // 1 s
-    .tensiometerMinPressure = 70.0f, // 70 mBar
+    .tensiometerMaxPressure = 70.0f, // 70 mBar
 };
 
 // config soil moistore tensiometer
