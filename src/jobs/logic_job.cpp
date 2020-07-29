@@ -267,7 +267,7 @@ state_t do_state_standby( instance_data_t *data ) {
 
     if(!data->waterTankEmpty
         && (data->timeLastIrrigationStart == 0 || getTime() > data->timeLastIrrigationStart + data->config->irrigationIntervalSec)
-        && data->tensiometerPressure >= data->config->tensiometerMinPressure) {
+        && data->tensiometerPressure >= data->config->tensiometerMaxPressure) {
         return PUMP_START;
     }
 

@@ -12,7 +12,7 @@ typedef struct {
                         irrigationPauseSec,
                         txIntervalSec,
                         defaultSleepTimeSec;
-    float               tensiometerMinPressure;
+    float               tensiometerMaxPressure;
 } hochbeet_config_t;
 
 // struct to store current state of hochbeet
