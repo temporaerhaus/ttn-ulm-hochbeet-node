@@ -7,6 +7,7 @@
 #include <RTCZero.h>
 #include <VL6180X.h>
 #include <Adafruit_ADS1015.h>
+#include "sensors.h"
 Adafruit_ADS1115 ads ; // (default gain = 2/3x to read +/- 6.144V  1 bit = 3mV)
 
 
@@ -152,7 +153,7 @@ state_t do_state_read_sensors(instance_data_t *data) {
 
     // Read distance sensor in water tank
     Serial.print("Reading tank distance...");
-    data->tankDistance = readTankDistance();
+    data->tankDistance = read_tank_distance_sensor();
     Serial.print("Tank distance ");
     Serial.print(data->tankDistance);
     Serial.println("");
@@ -256,6 +257,15 @@ state_t do_state_standby( instance_data_t *data ) {
     }
 
     // TODO
+    // todo ms print values and reasons
+
+    //Serial.print("Current: ");
+    //Serial.println(getTime());
+    //Serial.print("Stop at: ");
+    //Serial.println(data->timeLastIrrigationStart+ data->config->irrigationDurationSec);
+    //Serial.print("Diff   : ");
+    //Serial.println(getTime() - (data->timeLastIrrigationStart + data->config->irrigationDurationSec));
+
     if(!data->waterTankEmpty
         && (data->timeLastIrrigationStart == 0 || getTime() > data->timeLastIrrigationStart + data->config->irrigationIntervalSec)
         && data->tensiometerPressure >= data->config->tensiometerMinPressure) {
@@ -281,6 +291,7 @@ state_t do_state_pump_start( instance_data_t *data ) {
     // Set start of current irrigation intervall
     data->timeLastPumpStart = getTime();
 
+    Serial.print("Pumping for "); Serial.print(data->config->irrigationDurationSec); Serial.println("s");
     pumpeStart();
 
     return PUMP_RUN;
@@ -296,9 +307,20 @@ state_t do_state_pump_run(instance_data_t *data) {
     //data->flowerPotFull  = digitalRead(PIN_FLOWER_POT_FULL)  == 1 ? true : false;
     data->flowerPotFull = false;
 
+    // TODO hier geht er wohl aus
+
+    //Serial.print("Current: ");
+    //Serial.println(getTime());
+    //Serial.print("Stop at: ");
+    //int stop = data->timeLastPumpStart == 0 ? (getTime() + data->config->irrigationDurationSec) : data->timeLastPumpStart + data->config->irrigationDurationSec;
+    //Serial.println(stop);
+    //Serial.print("Diff   : ");
+    //Serial.println(getTime() - stop);
+
     if( data->waterTankEmpty
         || data->flowerPotFull
         || getTime() > data->timeLastPumpStart + data->config->irrigationDurationSec) {
+
             if(data->waterTankEmpty) {
                 Serial.println("EXIT: Water Tank Empty");
             }
@@ -481,7 +503,7 @@ float readTensiometerPressure() {
     Serial.print(" kPa  ");
     Serial.println(" ");
 #endif
-    return 100.0f;
+    return tensiometerPressure;
 }
 
 
@@ -539,64 +561,4 @@ void pumpeStop()
 void sleepForSeconds(int seconds)
 {
     // temporary disabled
-}
-
-float readTankDistance() {
-    int numberOfSamples = 20;
-
-    // clear trigger pin
-    digitalWrite(PIN_TANK_DISTANCE_TRIGGER, 0);
-    delayMicroseconds(10);
-
-    float measurements[numberOfSamples];
-
-    float duration, distance;
-    for (uint8_t i = 0; i < numberOfSamples; i++) {
-
-        // trigger sensor
-        digitalWrite(PIN_TANK_DISTANCE_TRIGGER, 1);
-        delayMicroseconds(100); // = 1ms
-        digitalWrite(PIN_TANK_DISTANCE_TRIGGER, 0);
-
-        // calculate distance via duration
-        duration = pulseIn(PIN_TANK_DISTANCE_ECHO, 1);
-        distance = duration * 0.032/2;
-
-        measurements[i] = distance;
-    }
-
-    // calculate median
-    quicksort(measurements, 0, numberOfSamples-1);
-    float median = measurements[numberOfSamples / 2];
-
-    return median;
-}
-
-void quicksort(float number[], int first, int last){
-   int i, j, pivot, temp;
-
-   if(first<last){
-      pivot=first;
-      i=first;
-      j=last;
-
-      while(i<j){
-         while(number[i]<=number[pivot]&&i<last)
-            i++;
-         while(number[j]>number[pivot])
-            j--;
-         if(i<j){
-            temp=number[i];
-            number[i]=number[j];
-            number[j]=temp;
-         }
-      }
-
-      temp=number[pivot];
-      number[pivot]=number[j];
-      number[j]=temp;
-      quicksort(number,first,j-1);
-      quicksort(number,j+1,last);
-
-   }
 }
