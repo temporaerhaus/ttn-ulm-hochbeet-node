@@ -10,48 +10,14 @@
 #include "sensors.h"
 Adafruit_ADS1115 ads ; // (default gain = 2/3x to read +/- 6.144V  1 bit = 3mV)
 
-
 static osjob_t logicjob;
-
-
 Adafruit_BME280 bme;  // I2C, depending on your BME, you have to use address 0x77 (default) or 0x76, see below
 const int BME_ADDR = 0x76; // use address 0x77 (default) or 0x76
 VL6180X s_vlx6180; // I2C, Pololu VL6180X Time-of-Flight Distance Sensor adress 0x29
 RTCZero rtc;
 
-// Enum holds name of states
-typedef enum { 
-    READ_SENSORS,
-    SEND_DATA,
-    STANDBY,
-    PUMP_START,
-    PUMP_RUN,
-    PUMP_STOP,
-    NUM_STATES } state_t;
-
 // unpretty workaround to access state ojects within LMIC OS jobs
 state_t cur_state; // set initial state to READ_SENSORS
-
-// default values for the data object
-instance_data_t hochbeet_data = {
-        &hochbeet_config,
-        0,     // time; last time the pump was started
-        0,     // time; last time the pump was stopped
-        0,     // time; last time the irrigation was started
-        0.0f,  // temperature (bme280)
-        0.0f,  // humidity (bme280)
-        0.0f,  // air pressure (bme280)
-        0.0f,  // tensio meter pressure
-        0.0f,  // tank distance
-        0.0f,  // watertank pressure 
-        0,     // time; last time data was sent via lorawan
-        0,     // internal water level of the tensiometer
-        false,  // is water tank empty
-        false,  // is the bed full of water
-        false, // is the irrigation running
-        true,  // bme available
-        false  // was the bed watered on the last cycle
-};
 
 
 typedef state_t state_func_t( instance_data_t *data );
@@ -70,7 +36,6 @@ void pumpeStart();
 void pumpeStop();
 void writeDisplay();
 float readTensiometerPressure();
-float readWatertankPressure();
 float readTensiometerInternalWaterLevel();
 void printdigit(int number);
 uint32_t getTime();
@@ -78,12 +43,10 @@ float readTankDistance();
 void quicksort(float number[20], int first, int last);
 
 
-
-
-
 state_func_t* const state_table[ NUM_STATES ] = {
     do_state_read_sensors, do_state_send_data, do_state_standby, do_state_pump_start, do_state_pump_run, do_state_pump_stop
 };
+
 
 // Executes given state and returns next state
 state_t run_state( state_t cur_state, instance_data_t *data ) {
@@ -93,9 +56,6 @@ state_t run_state( state_t cur_state, instance_data_t *data ) {
 
     return state_table[ cur_state ]( data );
 };
-
-
-
 
 
 // reads sensors and stores measurements
@@ -142,7 +102,7 @@ state_t do_state_read_sensors(instance_data_t *data) {
     Serial.println("");
 
     // Read watertank Pressure
-    data->watertankPressure = readWatertankPressure();
+    data->watertankPressure = read_watertank_pressure(ads);
     Serial.print("WassertankDruck ");
     Serial.print(data->watertankPressure);
     Serial.println("");
@@ -504,30 +464,6 @@ float readTensiometerPressure() {
     return tensiometerPressure;
 }
 
-
-float readWatertankPressure()
-{
-    // We use external  16 Bit ADC ADS1115. It has an resolution of 188uV/bit
-    int rawValue = ads.readADC_SingleEnded(1);
-    float watertankPressure;
-    float voltage = rawValue * 188.0f / 1000000.0f;
-
-    voltage = (voltage < tensiometer_config_water_tank.VminTyp) ? tensiometer_config_water_tank.VminTyp : voltage;
-    watertankPressure = 1.0 / tensiometer_config_water_tank.VrangeTyp * (voltage - tensiometer_config_water_tank.VminTyp) * tensiometer_config_water_tank.maxPressure;
-
-
-#ifdef DEBUG
-    Serial.print(rawValue);
-    Serial.print(" / ");
-    Serial.print(voltage);
-    Serial.print(" V");
-    Serial.print(" / ");
-    Serial.print(watertankPressure);
-    Serial.print(" kPa  ");
-    Serial.println(" ");
-#endif
-    return watertankPressure;
-}
 
 /**
  * Returns time since system start. Dependend on the board's 
