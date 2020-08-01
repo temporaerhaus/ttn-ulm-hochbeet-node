@@ -151,7 +151,7 @@ state_t do_state_read_sensors(instance_data_t *data) {
     data->tensiometerInternalWaterLevel = (uint8_t) round(readTensiometerInternalWaterLevel());
 
     // Read distance sensor in water tank
-    Serial.print("Reading tank distance...");
+    Serial.println("Reading tank distance...");
     data->tankDistance = read_tank_distance_sensor();
     Serial.print("Tank distance ");
     Serial.print(data->tankDistance);
@@ -447,24 +447,23 @@ void logic_job_init() {
  * Reads the internal water level of the
  * tensiometer
  */
-float readTensiometerInternalWaterLevel()
-{   
+float readTensiometerInternalWaterLevel() {
+
+    Serial.println("Reading internal tensiometer water level...");
+
     s_vlx6180.startRangeContinuous();
     uint8_t numberOfSuccesfullMeasurements = 0;
     float distance = 0.0f;
 
-    for (uint8_t i = 0; i < 20; i++)
-    {
+    for (uint8_t i = 0; i < 5; i++) {
         float currentDistance = s_vlx6180.readRangeContinuousMillimeters();
-        if (!s_vlx6180.timeoutOccurred())
-        {
+        if (!s_vlx6180.timeoutOccurred()) {
             distance += currentDistance;
             numberOfSuccesfullMeasurements += 1;
         }
     }
     
-    if (numberOfSuccesfullMeasurements > 0)
-    {
+    if (numberOfSuccesfullMeasurements > 0) {
         distance = distance/numberOfSuccesfullMeasurements;
     }
     
