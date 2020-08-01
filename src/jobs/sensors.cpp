@@ -8,11 +8,11 @@ float read_tank_distance_sensor() {
     #ifdef TESTMODE
     return 20.0;
     #else
-    int numberOfSamples = 20;
+    int numberOfSamples = 5;
 
     // clear trigger pin
     digitalWrite(PIN_TANK_DISTANCE_TRIGGER, 0);
-    delayMicroseconds(10);
+    delayMicroseconds(1000); // 10ms
 
     float measurements[numberOfSamples];
 
@@ -22,7 +22,7 @@ float read_tank_distance_sensor() {
 
         // trigger sensor
         digitalWrite(PIN_TANK_DISTANCE_TRIGGER, 1);
-        delayMicroseconds(100); // = 1ms
+        delayMicroseconds(500); // 5 ms
         digitalWrite(PIN_TANK_DISTANCE_TRIGGER, 0);
 
         // calculate distance via duration
@@ -32,13 +32,11 @@ float read_tank_distance_sensor() {
         measurements[i] = distance;
     }
     Serial.print("[DEBUG] Distance measurements took ");
-    Serial.println(start - millis());
+    unsigned long took = millis() - start;
+    Serial.println(took);
 
     // calculate median
-    start = millis();
     quicksort(measurements, 0, numberOfSamples-1);
-    Serial.print("[DEBUG] Distance quicksort took ");
-    Serial.println(start - millis());
 
     float median = measurements[numberOfSamples / 2];
     Serial.print("Median for tank distance: ");
