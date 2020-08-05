@@ -3,12 +3,12 @@
 
 // config of hochbeet
 hochbeet_config_t hochbeet_config = {
-        .irrigationIntervalSec = (uint32_t) 16 * 60 * 60,
+        .irrigationIntervalSec = (uint32_t) 8 * 60 * 60,
         .irrigationDurationSec = (uint32_t) 45,
         .irrigationPauseSec = (uint32_t) 30, // 30 s
         .txIntervalSec = (uint32_t) 10 * 60, // 5 min
         .defaultSleepTimeSec = 1, // 1 s
-        .tensiometerMaxPressure = 0.0f, // 70 mBar
+        .tensiometerMaxPressure = 70.0f, // 70 mBar
         // @TODO maxPressure changed temporary until correct value is evaluated. This low value ensures regular irrigation
 };
 
