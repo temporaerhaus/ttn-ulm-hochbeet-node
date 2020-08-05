@@ -83,7 +83,8 @@ state_t do_state_read_sensors(instance_data_t *data) {
     }
 
     // Water Tank @todo validate correct assignment (the nail sensor)
-    data->waterTankEmpty = read_water_tank_status();
+    //data->waterTankEmpty = read_water_tank_status();
+    data->waterTankEmpty = false;
     Serial.print("Status Water Tank Empty: ");
     Serial.println(data->waterTankEmpty);
     Serial.println();
