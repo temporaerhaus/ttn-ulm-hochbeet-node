@@ -3,22 +3,14 @@
 #include <hal/hal.h>
 #include <SPI.h>
 
+#include "config/pins.h"
 #include "jobs/lora_job.h"
 #include "jobs/logic_job.h"
-
-#ifdef DEBUG
-  #define print(x) Serial.print(x);
-  #define println(x) Serial.println(x);
-#else
-  #define print(x)
-  #define println(x)
-#endif
 
 //***************************
 // Setup
 //***************************
-void setup()
-{
+void setup() {
     Serial.begin(9600);
     delay(5000); //Backup Delay to transfer sketch
 
