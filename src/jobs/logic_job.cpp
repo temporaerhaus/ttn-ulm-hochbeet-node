@@ -37,7 +37,6 @@ void setRelay(int state);
 void pumpeStart();
 void pumpeStop();
 void writeDisplay();
-float readTensiometerPressure();
 float readTensiometerInternalWaterLevel();
 void printdigit(int number);
 uint32_t getTime();
@@ -119,7 +118,7 @@ state_t do_state_read_sensors(instance_data_t *data) {
     Serial.println("");
 
     // No need for sub-mm accuracy
-    data->tensiometerInternalWaterLevel = (uint8_t) round(readTensiometerInternalWaterLevel());
+    data->tensiometerInternalWaterLevel = (uint8_t) round(read_tensiometer_internal_water_level(s_vlx6180));
 
     // Read distance sensor in water tank
     Serial.println("Reading tank distance...");
@@ -414,34 +413,6 @@ void logic_job_init() {
 
     // schedule first run
     os_setTimedCallback(&logicjob, os_getTime()+sec2osticks(hochbeet_data.config->defaultSleepTimeSec), do_logic);
-}
-
-
-/**
- * Reads the internal water level of the
- * tensiometer
- */
-float readTensiometerInternalWaterLevel() {
-
-    Serial.println("Reading internal tensiometer water level...");
-
-    s_vlx6180.startRangeContinuous();
-    uint8_t numberOfSuccesfullMeasurements = 0;
-    float distance = 0.0f;
-
-    for (uint8_t i = 0; i < 5; i++) {
-        float currentDistance = s_vlx6180.readRangeContinuousMillimeters();
-        if (!s_vlx6180.timeoutOccurred()) {
-            distance += currentDistance;
-            numberOfSuccesfullMeasurements += 1;
-        }
-    }
-    
-    if (numberOfSuccesfullMeasurements > 0) {
-        distance = distance/numberOfSuccesfullMeasurements;
-    }
-    
-    return distance;
 }
 
 //***************************

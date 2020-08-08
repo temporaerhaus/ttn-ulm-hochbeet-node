@@ -2,6 +2,7 @@
 #include "config/pins.h"
 #include "config/control.h"
 #include <Adafruit_ADS1015.h>
+#include <VL6180X.h>
 
 void quicksort(float number[20], int first, int last);
 
@@ -143,4 +144,30 @@ float read_tensiometer_pressure(Adafruit_ADS1115& ads) {
     Serial.println(" ");
     #endif
     return tensiometerPressure;
+}
+
+/**
+ * Reads the internal water level of the
+ * tensiometer
+ */
+float read_tensiometer_internal_water_level(VL6180X& s_vlx6180) {
+    Serial.println("Reading internal tensiometer water level...");
+
+    s_vlx6180.startRangeContinuous();
+    uint8_t numberOfSuccesfullMeasurements = 0;
+    float distance = 0.0f;
+
+    for (uint8_t i = 0; i < 5; i++) {
+        float currentDistance = s_vlx6180.readRangeContinuousMillimeters();
+        if (!s_vlx6180.timeoutOccurred()) {
+            distance += currentDistance;
+            numberOfSuccesfullMeasurements += 1;
+        }
+    }
+
+    if (numberOfSuccesfullMeasurements > 0) {
+        distance = distance/numberOfSuccesfullMeasurements;
+    }
+
+    return distance;
 }
