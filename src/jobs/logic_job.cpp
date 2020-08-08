@@ -107,7 +107,7 @@ state_t do_state_read_sensors(instance_data_t *data) {
 
 
     // Read tensiometer (soil moisture)
-    data->tensiometerPressure = readTensiometerPressure();
+    data->tensiometerPressure = read_tensiometer_pressure(ads);
     Serial.print("Tensiometer ");
     Serial.print(data->tensiometerPressure);
     Serial.println("");
@@ -451,33 +451,6 @@ void setRelay(int state)
 {
     digitalWrite(PIN_RELAY, state);
 }
-
-/**
- * Reads to inner pressure of the tensiometer which
- * indicates how moist the soil is. 
- */
-float readTensiometerPressure() {
-    // We use external  16 Bit ADC ADS1115. It has an resolution of 188uV/bit
-    int rawValue = ads.readADC_SingleEnded(0);
-    float tensiometerPressure;
-    float voltage = rawValue * 188.0f / 1000000.0f;
-
-    voltage = (voltage < tensiometer_config_soil_moistor.VminTyp) ? tensiometer_config_soil_moistor.VminTyp : voltage;
-    tensiometerPressure = 1.0 / tensiometer_config_soil_moistor.VrangeTyp * (voltage - tensiometer_config_soil_moistor.VminTyp) * tensiometer_config_soil_moistor.maxPressure;
-
-#ifdef DEBUG
-    Serial.print(rawValue);
-    Serial.print(" / ");
-    Serial.print(voltage);
-    Serial.print(" V");
-    Serial.print(" / ");
-    Serial.print(tensiometerPressure);
-    Serial.print(" kPa  ");
-    Serial.println(" ");
-#endif
-    return tensiometerPressure;
-}
-
 
 /**
  * Returns time since system start. Dependend on the board's 

@@ -117,3 +117,30 @@ float read_watertank_pressure(Adafruit_ADS1115& ads) {
     #endif
     return watertankPressure;
 }
+
+/**
+ * Reads to inner pressure of the tensiometer which
+ * indicates how moist the soil is.
+ */
+float read_tensiometer_pressure(Adafruit_ADS1115& ads) {
+
+    // We use external  16 Bit ADC ADS1115. It has an resolution of 188uV/bit
+    int rawValue = ads.readADC_SingleEnded(0);
+    float tensiometerPressure;
+    float voltage = rawValue * 188.0f / 1000000.0f;
+
+    voltage = (voltage < tensiometer_config_soil_moistor.VminTyp) ? tensiometer_config_soil_moistor.VminTyp : voltage;
+    tensiometerPressure = 1.0 / tensiometer_config_soil_moistor.VrangeTyp * (voltage - tensiometer_config_soil_moistor.VminTyp) * tensiometer_config_soil_moistor.maxPressure;
+
+    #ifdef DEBUG
+    Serial.print(rawValue);
+    Serial.print(" / ");
+    Serial.print(voltage);
+    Serial.print(" V");
+    Serial.print(" / ");
+    Serial.print(tensiometerPressure);
+    Serial.print(" kPa  ");
+    Serial.println(" ");
+    #endif
+    return tensiometerPressure;
+}
