@@ -18,7 +18,7 @@ RTCZero rtc;
 
 // unpretty workaround to access state ojects within LMIC OS jobs
 state_t cur_state; // set initial state to READ_SENSORS
-
+bool standByEntered = false;
 
 typedef state_t state_func_t( instance_data_t *data );
 
@@ -28,6 +28,8 @@ state_t do_state_standby( instance_data_t *data );
 state_t do_state_pump_start( instance_data_t *data );
 state_t do_state_pump_run( instance_data_t *data );
 state_t do_state_pump_stop( instance_data_t *data );
+
+void printState(state_t  cur_state, state_t prev_state);
 
 // declaring functions
 void sleepForSeconds(int milliSeconds);
@@ -42,6 +44,14 @@ uint32_t getTime();
 float readTankDistance();
 void quicksort(float number[20], int first, int last);
 
+const state_names_t state_names[] {
+        {0, "[S] Read sensors"},
+        {1, "[S] Send data"},
+        {2, "[S] Standby"},
+        {3, "[S] Pump start"},
+        {4, "[S] Pump run"},
+        {5, "[S] Pump stop"},
+};
 
 state_func_t* const state_table[ NUM_STATES ] = {
     do_state_read_sensors, do_state_send_data, do_state_standby, do_state_pump_start, do_state_pump_run, do_state_pump_stop
@@ -51,7 +61,7 @@ state_func_t* const state_table[ NUM_STATES ] = {
 // Executes given state and returns next state
 state_t run_state( state_t cur_state, instance_data_t *data ) {
     #ifdef DEBUG
-        Serial.println("run_state");
+        //Serial.println("run_state");
     #endif
 
     return state_table[ cur_state ]( data );
@@ -60,7 +70,7 @@ state_t run_state( state_t cur_state, instance_data_t *data ) {
 
 // reads sensors and stores measurements
 state_t do_state_read_sensors(instance_data_t *data) {
-    Serial.println("do_state_read_sensors");
+    //Serial.println("do_state_read_sensors");
 
     if (data->bmeAvailable) {
         Serial.println("Reading BME sensor values.");
@@ -125,7 +135,7 @@ state_t do_state_read_sensors(instance_data_t *data) {
 
 // prepares measurements for transmission and starts send_job
 state_t do_state_send_data(instance_data_t *data) {
-    Serial.println("do_state_send_data");
+    //Serial.println("do_state_send_data");
     /*
                         timeLastIrrigationStart;        4
     float               temperature,                    2
@@ -196,7 +206,7 @@ state_t do_state_send_data(instance_data_t *data) {
 }
 
 state_t do_state_standby( instance_data_t *data ) {
-    Serial.println("do_state_standby");
+    //Serial.println("do_state_standby");
 
     #ifdef DEBUG1
     Serial.print("Current Time: ");
@@ -239,7 +249,7 @@ state_t do_state_standby( instance_data_t *data ) {
 
 // starts pump
 state_t do_state_pump_start( instance_data_t *data ) {
-    Serial.println("do_state_pump_start");
+    //Serial.println("do_state_pump_start");
     // If starting a new irrigation, set start time (note: a single irrigation
     // consists of multiple irrigation intervalls)
     if(!data->irrigationRunning) {
@@ -251,14 +261,14 @@ state_t do_state_pump_start( instance_data_t *data ) {
     // Set start of current irrigation intervall
     data->timeLastPumpStart = getTime();
 
-    Serial.print("Pumping for "); Serial.print(data->config->irrigationDurationSec); Serial.println("s");
+    Serial.print("[I] Pumping for "); Serial.print(data->config->irrigationDurationSec); Serial.println("s");
     pumpeStart();
 
     return PUMP_RUN;
 }
 
 state_t do_state_pump_run(instance_data_t *data) {
-    Serial.println("do_state_pump_run");
+    //Serial.println("do_state_pump_run");
     // Water Tank @TODO validate correct assignment
     //data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? false : true;
     data->waterTankEmpty = false;
@@ -298,7 +308,7 @@ state_t do_state_pump_run(instance_data_t *data) {
 }
 
 state_t do_state_pump_stop ( instance_data_t *data ) {
-    Serial.println("do_state_pump_stop");
+    //Serial.println("do_state_pump_stop");
     pumpeStop();
     data->timeLastPumpStop = getTime();
 
@@ -322,7 +332,10 @@ state_t do_state_pump_stop ( instance_data_t *data ) {
 
 
 void do_logic(osjob_t *j) {
+    state_t prev_state = cur_state;
     cur_state = run_state(cur_state, &hochbeet_data);
+
+    printState(cur_state, prev_state);
 
     // Start next logic job here
     os_setTimedCallback(&logicjob, os_getTime()+sec2osticks(hochbeet_data.config->defaultSleepTimeSec), do_logic);
@@ -496,4 +509,22 @@ void pumpeStop()
 void sleepForSeconds(int seconds)
 {
     // temporary disabled
+}
+
+void printState(state_t  cur_state, state_t prev_state) {
+
+    // first time entering standby
+    if (!standByEntered && cur_state == STANDBY) {
+        Serial.print(state_names[cur_state].name);
+        standByEntered = true;
+    }
+    if (cur_state == STANDBY && standByEntered) {
+        Serial.print(".");
+    }
+    if (cur_state != STANDBY) {
+        if (prev_state == STANDBY) {Serial.println("");}
+        Serial.println(state_names[cur_state].name);
+        standByEntered = false;
+    }
+
 }

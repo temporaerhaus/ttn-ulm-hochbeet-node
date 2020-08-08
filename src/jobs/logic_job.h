@@ -13,6 +13,11 @@ typedef enum {
     PUMP_STOP,
     NUM_STATES } state_t;
 
+typedef struct {
+    uint8_t lang;
+    char* name;
+} state_names_t;
+
 void logic_job_init(void);
 
 #endif
