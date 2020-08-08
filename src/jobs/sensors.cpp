@@ -165,6 +165,8 @@ float read_tensiometer_internal_water_level(VL6180X& s_vlx6180) {
         }
     }
 
+    s_vlx6180.stopContinuous();
+
     if (numberOfSuccesfullMeasurements > 0) {
         distance = distance/numberOfSuccesfullMeasurements;
     }
