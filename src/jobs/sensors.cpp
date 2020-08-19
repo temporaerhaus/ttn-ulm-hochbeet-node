@@ -4,8 +4,7 @@
 #include <Adafruit_ADS1015.h>
 #include <VL6180X.h>
 
-void quicksort(float number[20], int first, int last);
-
+void bubblesort(float *array, int length);
 
 float read_tank_distance_sensor() {
     #ifdef TESTMODE
@@ -39,7 +38,7 @@ float read_tank_distance_sensor() {
     Serial.println(took);
 
     // calculate median
-    quicksort(measurements, 0, numberOfSamples-1);
+    bubblesort(measurements, numberOfSamples);
 
     float median = measurements[numberOfSamples / 2];
     Serial.print("Median for tank distance: ");
@@ -48,38 +47,24 @@ float read_tank_distance_sensor() {
     #endif
 }
 
-void quicksort(float number[], int first, int last){
-    int i, j, pivot, temp;
-
-    if(first<last){
-        pivot=first;
-        i=first;
-        j=last;
-
-        while(i<j){
-            while(number[i]<=number[pivot]&&i<last)
-                i++;
-            while(number[j]>number[pivot])
-                j--;
-            if(i<j){
-                temp=number[i];
-                number[i]=number[j];
-                number[j]=temp;
+// bubble sort is O(n^2), but good enough for this and simple enough
+// to know what's happening.
+void bubblesort(float *array, int length) {
+    int i, j, tmp;
+    for (i = 1; i < length ; i++) {
+        for (j = 0; j < length - i ; j++) {
+            if (array[j] > array[j + 1]) {
+                tmp = array[j];
+                array[j] = array[j + 1];
+                array[j + 1] = tmp;
             }
         }
-
-        temp=number[pivot];
-        number[pivot]=number[j];
-        number[j]=temp;
-        quicksort(number,first,j-1);
-        quicksort(number,j+1,last);
-
     }
 }
 
 boolean read_water_tank_status() {
     #ifdef TESTMODE
-    Serial.println("Reading water tank nail sensor in TESTMODE. Returning false.");
+    Serial.println("[TESTMODE] Water tank status. Returning false (not empty).");
     return false;
     #else
     return digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? false : true;
@@ -89,15 +74,19 @@ boolean read_water_tank_status() {
 
 boolean read_flower_pot_status(){
     #ifdef TESTMODE
-    Serial.println("Reading flower pot sensor in TESTMODE. Returning false (not full).");
+    Serial.println("[TESTMODE] Flower pot status. Returning false (not full).");
     return false;
     #else
-    return digitalRead(PIN_FLOWER_POT_FULL)  == 1 ? true : false;
+    return digitalRead(PIN_FLOWER_POT_FULL) == 1 ? true : false;
     #endif
 }
 
 float read_watertank_pressure(Adafruit_ADS1115& ads) {
     // We use external  16 Bit ADC ADS1115. It has an resolution of 188uV/bit
+    #ifdef TESTMODE
+    Serial.println("[TESTMODE] Water tank pressure. Returning 0.0f");
+    return 0.0f;
+    #else
     int rawValue = ads.readADC_SingleEnded(1);
     float watertankPressure;
     float voltage = rawValue * 188.0f / 1000000.0f;
@@ -117,6 +106,7 @@ float read_watertank_pressure(Adafruit_ADS1115& ads) {
     Serial.println(" ");
     #endif
     return watertankPressure;
+    #endif
 }
 
 /**
@@ -124,7 +114,10 @@ float read_watertank_pressure(Adafruit_ADS1115& ads) {
  * indicates how moist the soil is.
  */
 float read_tensiometer_pressure(Adafruit_ADS1115& ads) {
-
+    #ifdef TESTMODE
+    Serial.println("[TESTMODE] Tensiometer pressure. Returning 50.0f");
+    return 50.0f;
+    #else
     // We use external  16 Bit ADC ADS1115. It has an resolution of 188uV/bit
     int rawValue = ads.readADC_SingleEnded(0);
     float tensiometerPressure;
@@ -144,6 +137,7 @@ float read_tensiometer_pressure(Adafruit_ADS1115& ads) {
     Serial.println(" ");
     #endif
     return tensiometerPressure;
+    #endif
 }
 
 /**
@@ -151,6 +145,10 @@ float read_tensiometer_pressure(Adafruit_ADS1115& ads) {
  * tensiometer
  */
 float read_tensiometer_internal_water_level(VL6180X& s_vlx6180) {
+    #ifdef TESTMODE
+    Serial.println("[TESTMODE] Tensiometer internal water level. Returning 1.0f");
+    return 1.0f;
+    #else
     Serial.println("Reading internal tensiometer water level...");
 
     s_vlx6180.startRangeContinuous();
@@ -172,4 +170,5 @@ float read_tensiometer_internal_water_level(VL6180X& s_vlx6180) {
     }
 
     return distance;
+    #endif
 }

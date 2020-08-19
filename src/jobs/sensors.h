@@ -10,6 +10,6 @@ bool read_flower_pot_status();
 float read_watertank_pressure(Adafruit_ADS1115& ads);
 float read_tensiometer_pressure(Adafruit_ADS1115& ads);
 float read_tensiometer_internal_water_level(VL6180X& s_vlx6180);
-bool quicksort();
+void bubblesort(float *array, int length);
 
 #endif
