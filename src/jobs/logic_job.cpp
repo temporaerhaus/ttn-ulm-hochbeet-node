@@ -96,26 +96,21 @@ state_t do_state_read_sensors(instance_data_t *data) {
     data->waterTankEmpty = false;
     Serial.print("Status Water Tank Empty: ");
     Serial.println(data->waterTankEmpty);
-    Serial.println();
 
     // Flower Pot @todo validate correct assignment
     data->flowerPotFull  = read_flower_pot_status();
     Serial.print("Status Flower Pot Full: ");
     Serial.println(data->flowerPotFull);
-    Serial.println();
-
 
     // Read tensiometer (soil moisture)
     data->tensiometerPressure = read_tensiometer_pressure(ads);
     Serial.print("Tensiometer ");
-    Serial.print(data->tensiometerPressure);
-    Serial.println("");
+    Serial.println(data->tensiometerPressure);
 
     // Read watertank Pressure
     data->watertankPressure = read_watertank_pressure(ads);
     Serial.print("WassertankDruck ");
-    Serial.print(data->watertankPressure);
-    Serial.println("");
+    Serial.println(data->watertankPressure);
 
     // No need for sub-mm accuracy
     data->tensiometerInternalWaterLevel = (uint8_t) round(read_tensiometer_internal_water_level(s_vlx6180));
@@ -124,9 +119,7 @@ state_t do_state_read_sensors(instance_data_t *data) {
     Serial.println("Reading tank distance...");
     data->tankDistance = read_tank_distance_sensor();
     Serial.print("Tank distance ");
-    Serial.print(data->tankDistance);
-    Serial.println("");
-
+    Serial.println(data->tankDistance);
 
     return SEND_DATA;
 }
@@ -271,20 +264,14 @@ state_t do_state_pump_run(instance_data_t *data) {
     // Water Tank @TODO validate correct assignment
     //data->waterTankEmpty = digitalRead(PIN_WATER_TANK_EMPTY) == 1 ? false : true;
     data->waterTankEmpty = false;
+    Serial.print("[I] Water tank: ");
+    Serial.println(data->waterTankEmpty);
 
     // Flower Pot @TODO validate correct assignment
     //data->flowerPotFull  = digitalRead(PIN_FLOWER_POT_FULL)  == 1 ? true : false;
     data->flowerPotFull = false;
-
-    // TODO hier geht er wohl aus
-
-    //Serial.print("Current: ");
-    //Serial.println(getTime());
-    //Serial.print("Stop at: ");
-    //int stop = data->timeLastPumpStart == 0 ? (getTime() + data->config->irrigationDurationSec) : data->timeLastPumpStart + data->config->irrigationDurationSec;
-    //Serial.println(stop);
-    //Serial.print("Diff   : ");
-    //Serial.println(getTime() - stop);
+    Serial.print("[I] Flower pot full: ");
+    Serial.println(data->flowerPotFull);
 
     if( data->waterTankEmpty
         || data->flowerPotFull
