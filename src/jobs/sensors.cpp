@@ -20,6 +20,7 @@ float read_tank_distance_sensor() {
 
     unsigned long start = millis();
     float duration, distance;
+    Serial.print("Reading tank distance...");
     for (uint8_t i = 0; i < numberOfSamples; i++) {
 
         // trigger sensor
@@ -30,9 +31,10 @@ float read_tank_distance_sensor() {
         // calculate distance via duration
         duration = pulseIn(PIN_TANK_DISTANCE_ECHO, 1);
         distance = duration * 0.032/2;
-
+        Serial.print(distance); Serial.print(" ");
         measurements[i] = distance;
     }
+    Serial.println("");
     Serial.print("[DEBUG] Distance measurements took ");
     unsigned long took = millis() - start;
     Serial.println(took);

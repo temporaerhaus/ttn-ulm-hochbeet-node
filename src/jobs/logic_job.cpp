@@ -116,9 +116,7 @@ state_t do_state_read_sensors(instance_data_t *data) {
     data->tensiometerInternalWaterLevel = (uint8_t) round(read_tensiometer_internal_water_level(s_vlx6180));
 
     // Read distance sensor in water tank
-    Serial.println("Reading tank distance...");
     data->tankDistance = read_tank_distance_sensor();
-    Serial.print("Tank distance ");
     Serial.println(data->tankDistance);
 
     return SEND_DATA;
@@ -180,7 +178,7 @@ state_t do_state_send_data(instance_data_t *data) {
     }
 
     // tank distance
-    int tankDistance = round(data->tankDistance * 100); // is / 100 correct?
+    int tankDistance = round(data->tankDistance * 100); // example: 19.26 cm, * 100 = 1926. divide by 100 on TTN console
     payload[14] = highByte(tankDistance);
     payload[15] = lowByte(tankDistance);
     int watertankPressure = round(data->watertankPressure);
@@ -395,6 +393,9 @@ void logic_job_init() {
     //***********************
     pinMode(PIN_WATER_TANK_EMPTY, INPUT);
     pinMode(PIN_FLOWER_POT_FULL, INPUT);
+    // ultrasonic distance pins
+    pinMode(PIN_TANK_DISTANCE_TRIGGER, OUTPUT);
+    pinMode(PIN_TANK_DISTANCE_ECHO, INPUT);
 
     cur_state = READ_SENSORS; // set initial state to READ_SENSORS
 
