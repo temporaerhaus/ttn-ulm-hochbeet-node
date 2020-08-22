@@ -142,6 +142,37 @@ float read_tensiometer_pressure(Adafruit_ADS1115& ads) {
     #endif
 }
 
+
+/**
+ * Reads batery voltage
+ */
+float read_battery(Adafruit_ADS1115& ads) {
+#ifdef TESTMODE
+    Serial.println("[TESTMODE] BAttery Voltage pressure. Returning 5.0f");
+    return 5.0f;
+#else
+    // We use external  16 Bit ADC ADS1115. It has an resolution of 188uV/bit
+    int rawValue = ads.readADC_SingleEnded(3);
+    float voltage = rawValue * 188.0f / 1000000.0f;
+    int gain = 10;
+    voltage = (voltage * gain);
+
+
+#ifdef DEBUG
+    Serial.print(rawValue);
+    Serial.print(" / ");
+    Serial.print(voltage);
+    Serial.print(" V");
+    Serial.print(" / ");
+    Serial.print(voltage);
+    Serial.print(" kPa  ");
+    Serial.println(" ");
+#endif
+    return voltage;
+#endif
+}
+
+
 /**
  * Reads the internal water level of the
  * tensiometer
@@ -174,3 +205,4 @@ float read_tensiometer_internal_water_level(VL6180X& s_vlx6180) {
     return distance;
     #endif
 }
+

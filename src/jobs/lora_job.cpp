@@ -268,6 +268,7 @@ void init_abp() {
 
     // Set data rate and transmit power for uplink
     LMIC_setDrTxpow(DR_SF12,14);
+
 }
 #endif
 

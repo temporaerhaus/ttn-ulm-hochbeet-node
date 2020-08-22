@@ -1,13 +1,5 @@
-
-
-
-
 // RENAME TO ttn.h
-
 // FILL IN YOUR TTN DREDENTIALS
-
-
-
 
 #ifndef TTN_CONFIG_H
 #define TTN_CONFIG_H
