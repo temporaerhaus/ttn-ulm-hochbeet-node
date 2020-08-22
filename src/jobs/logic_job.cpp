@@ -119,6 +119,11 @@ state_t do_state_read_sensors(instance_data_t *data) {
     data->tankDistance = read_tank_distance_sensor();
     Serial.println(data->tankDistance);
 
+    // Read battery
+    data->battery = read_battery(ads);
+    Serial.print("Battery ");
+    Serial.println(data->battery);
+
     return SEND_DATA;
 }
 
@@ -184,6 +189,10 @@ state_t do_state_send_data(instance_data_t *data) {
     int watertankPressure = round(data->watertankPressure);
     payload[16] = highByte(watertankPressure);
     payload[17] = lowByte(watertankPressure);
+
+    int battery = round(data->battery*100);
+    payload[18] = highByte(battery);
+    payload[19] = lowByte(battery);
 
     // Schedule transmission in 3s
     lora_job_send_status(payload);

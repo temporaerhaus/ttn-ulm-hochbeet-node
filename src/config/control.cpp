@@ -24,6 +24,7 @@ instance_data_t hochbeet_data = {
         0.0f,  // tensio meter pressure
         0.0f,  // tank distance
         0.0f,  // watertank pressure
+        0,             //battery voltage
         0,     // time; last time data was sent via lorawan
         0,     // internal water level of the tensiometer
         false,  // is water tank empty

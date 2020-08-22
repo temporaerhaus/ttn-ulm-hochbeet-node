@@ -24,7 +24,9 @@ typedef struct {
             airPressure,
             tensiometerPressure,
             tankDistance,
-            watertankPressure;
+            watertankPressure,
+            battery;
+
     uint32_t            timeLastDataSent;
     uint8_t             tensiometerInternalWaterLevel;
     boolean             waterTankEmpty;
