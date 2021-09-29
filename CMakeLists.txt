@@ -6,7 +6,7 @@
 # The `CMakeListsUser.txt` will not be overwritten by PlatformIO.
 
 cmake_minimum_required(VERSION 3.2)
-project(hochbeet)
+project("hochbeet")
 
 include(CMakeListsPrivate.txt)
 
@@ -16,49 +16,55 @@ endif()
 
 add_custom_target(
     PLATFORMIO_BUILD ALL
-    COMMAND ${PLATFORMIO_CMD} -f -c clion run
+    COMMAND ${PLATFORMIO_CMD} -f -c clion run "$<$<NOT:$<CONFIG:All>>:-e${CMAKE_BUILD_TYPE}>"
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 add_custom_target(
     PLATFORMIO_BUILD_VERBOSE ALL
-    COMMAND ${PLATFORMIO_CMD} -f -c clion run --verbose
+    COMMAND ${PLATFORMIO_CMD} -f -c clion run --verbose "$<$<NOT:$<CONFIG:All>>:-e${CMAKE_BUILD_TYPE}>"
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 add_custom_target(
     PLATFORMIO_UPLOAD ALL
-    COMMAND ${PLATFORMIO_CMD} -f -c clion run --target upload
+    COMMAND ${PLATFORMIO_CMD} -f -c clion run --target upload "$<$<NOT:$<CONFIG:All>>:-e${CMAKE_BUILD_TYPE}>"
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 add_custom_target(
     PLATFORMIO_CLEAN ALL
-    COMMAND ${PLATFORMIO_CMD} -f -c clion run --target clean
+    COMMAND ${PLATFORMIO_CMD} -f -c clion run --target clean "$<$<NOT:$<CONFIG:All>>:-e${CMAKE_BUILD_TYPE}>"
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 add_custom_target(
     PLATFORMIO_MONITOR ALL
-    COMMAND ${PLATFORMIO_CMD} -f -c clion device monitor
+    COMMAND ${PLATFORMIO_CMD} -f -c clion device monitor "$<$<NOT:$<CONFIG:All>>:-e${CMAKE_BUILD_TYPE}>"
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 add_custom_target(
     PLATFORMIO_TEST ALL
-    COMMAND ${PLATFORMIO_CMD} -f -c clion test
+    COMMAND ${PLATFORMIO_CMD} -f -c clion test "$<$<NOT:$<CONFIG:All>>:-e${CMAKE_BUILD_TYPE}>"
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 add_custom_target(
     PLATFORMIO_PROGRAM ALL
-    COMMAND ${PLATFORMIO_CMD} -f -c clion run --target program
+    COMMAND ${PLATFORMIO_CMD} -f -c clion run --target program "$<$<NOT:$<CONFIG:All>>:-e${CMAKE_BUILD_TYPE}>"
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 add_custom_target(
     PLATFORMIO_UPLOADFS ALL
-    COMMAND ${PLATFORMIO_CMD} -f -c clion run --target uploadfs
+    COMMAND ${PLATFORMIO_CMD} -f -c clion run --target uploadfs "$<$<NOT:$<CONFIG:All>>:-e${CMAKE_BUILD_TYPE}>"
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_custom_target(
+    PLATFORMIO_BUILD_DEBUG ALL
+    COMMAND ${PLATFORMIO_CMD} -f -c clion run --target debug "$<$<NOT:$<CONFIG:All>>:-e${CMAKE_BUILD_TYPE}>"
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
@@ -74,4 +80,10 @@ add_custom_target(
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-add_executable(${PROJECT_NAME} ${SRC_LIST})
+add_custom_target(
+    PLATFORMIO_DEVICE_LIST ALL
+    COMMAND ${PLATFORMIO_CMD} -f -c clion device list
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_executable(Z_DUMMY_TARGET ${SRC_LIST})

@@ -1,7 +1,8 @@
 #ifndef PIN_CONFIG_H
 #define PIN_CONFIG_H
 
-#define Serial Serial1
+
+//#define Serial Serial1
 
 #define TENSIOMETER_PRESSURE_PIN A1
 // Water Level Sensors

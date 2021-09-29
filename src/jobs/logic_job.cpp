@@ -6,8 +6,9 @@
 #include "config/pins.h"
 #include <RTCZero.h>
 #include <VL6180X.h>
-#include <Adafruit_ADS1015.h>
+#include <Adafruit_ADS1X15.h>
 #include "sensors.h"
+#include "arduino_lmic.h"
 Adafruit_ADS1115 ads ; // (default gain = 2/3x to read +/- 6.144V  1 bit = 3mV)
 
 static osjob_t logicjob;
@@ -136,7 +137,7 @@ state_t do_state_send_data(instance_data_t *data) {
     boolean             waterTankEmpty = true;          1
     boolean             flowerPotFull = false;          1
     */
-    byte payload[PAYLOAD_SIZE];
+    byte payload[20];
 
     // time of last irrigation
     payload[0] = (byte) ((data->timeLastIrrigationStart & 0xFF000000) >> 24 );

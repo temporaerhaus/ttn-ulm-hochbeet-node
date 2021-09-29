@@ -1,7 +1,7 @@
 #include "sensors.h"
 #include "config/pins.h"
 #include "config/control.h"
-#include <Adafruit_ADS1015.h>
+#include <Adafruit_ADS1X15.h>
 #include <VL6180X.h>
 
 void bubblesort(float *array, int length);

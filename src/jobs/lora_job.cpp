@@ -19,14 +19,14 @@
 #include <config/ttn.h>
 
 static osjob_t lorajob;
-static byte currentPayload[PAYLOAD_SIZE] = {0};
+static byte currentPayload[20] = {0};
 
 
-
+#ifndef OTAA
 void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);}
 void os_getArtEui (u1_t* buf) { memcpy_P(buf, APPEUI, 8);}
 void os_getDevKey (u1_t* buf) { memcpy_P(buf, APPKEY, 16);}
-
+#endif
 
 void printHex2(unsigned v) {
     v &= 0xff;
@@ -48,8 +48,8 @@ void do_send(osjob_t* j){
     // Next TX is scheduled after TX_COMPLETE event.
 }
 
-void lora_job_send_status(byte payload[PAYLOAD_SIZE]) {
-    for (uint8_t i = 0; i < PAYLOAD_SIZE; i++)
+void lora_job_send_status(byte payload[20]) {
+    for (uint8_t i = 0; i < 20; i++)
     {
         currentPayload[i] = payload[i];
     }
@@ -179,7 +179,7 @@ void onEvent (ev_t ev) {
 
 #ifdef OTAA
 void init_otaa() {
-    LMIC_setClockError(MAX_CLOCK_ERROR * 5 / 100 );
+    //LMIC_setClockError(MAX_CLOCK_ERROR * 5 / 100);
     LMIC_setLinkCheckMode(1);
     LMIC_setAdrMode(1);
     LMIC_startJoining();
@@ -267,7 +267,7 @@ void init_abp() {
     LMIC.dn2Dr = DR_SF9;
 
     // Set data rate and transmit power for uplink
-    LMIC_setDrTxpow(DR_SF12,14);
+    LMIC_setDrTxpow(DR_SF7,14);
 }
 #endif
 

@@ -13,6 +13,7 @@
 void setup() {
     Serial.begin(9600);
     delay(5000); //Backup Delay to transfer sketch
+    Serial.println(F("start"));
 
     // init LMIC_OS
     os_init();
