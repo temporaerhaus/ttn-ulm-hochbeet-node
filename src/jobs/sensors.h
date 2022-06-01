@@ -1,7 +1,7 @@
 #ifndef SENSORS_H
 #define SENSORS_H
 
-#include <Adafruit_ADS1015.h>
+#include <Adafruit_ADS1X15.h>
 #include <VL6180X.h>
 
 float read_tank_distance_sensor();

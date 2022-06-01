@@ -6,7 +6,7 @@
 #include "config/pins.h"
 #include <RTCZero.h>
 #include <VL6180X.h>
-#include <Adafruit_ADS1015.h>
+#include <Adafruit_ADS1X15.h>
 #include "sensors.h"
 Adafruit_ADS1115 ads ; // (default gain = 2/3x to read +/- 6.144V  1 bit = 3mV)
 
