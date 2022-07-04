@@ -34,11 +34,11 @@ void printState(state_t  cur_state, state_t prev_state);
 // declaring functions
 void sleepForSeconds(int milliSeconds);
 void setRelay(int state);
-void pumpeStart();
-void pumpeStop();
+void pumpStart();
+void pumpStop();
 void writeDisplay();
 float readTensiometerInternalWaterLevel();
-void printdigit(int number);
+void printDigit(int number);
 uint32_t getTime();
 float readTankDistance();
 void quicksort(float number[20], int first, int last);
@@ -261,7 +261,7 @@ state_t do_state_pump_start( instance_data_t *data ) {
     data->timeLastPumpStart = getTime();
 
     Serial.print("[I] Pumping for "); Serial.print(data->config->irrigationDurationSec); Serial.println("s");
-    pumpeStart();
+    pumpStart();
 
     return PUMP_RUN;
 }
@@ -302,7 +302,7 @@ state_t do_state_pump_run(instance_data_t *data) {
 
 state_t do_state_pump_stop ( instance_data_t *data ) {
     //Serial.println("do_state_pump_stop");
-    pumpeStop();
+    pumpStop();
     data->timeLastPumpStop = getTime();
 
     
@@ -431,7 +431,7 @@ uint32_t getTime() {
 /**
  * Starts the pump to pump water into the plant.
  */
-void pumpeStart()
+void pumpStart()
 {
     setRelay(1);
 }
@@ -439,7 +439,7 @@ void pumpeStart()
 /**
  * Stops the pump.
  */
-void pumpeStop()
+void pumpStop()
 {
     setRelay(0);
 }
