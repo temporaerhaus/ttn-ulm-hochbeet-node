@@ -334,6 +334,22 @@ void do_logic(osjob_t *j) {
     os_setTimedCallback(&logicjob, os_getTime()+sec2osticks(hochbeet_data.config->defaultSleepTimeSec), do_logic);
 }
 
+
+/*
+Starts first run of logic job after lmic has joined ttn
+*/
+void onJoinedCallback(void *pUserData, ev_t ev) {
+    switch (ev) {
+    case EV_JOINED:
+    case EV_JOIN_FAILED: // start logic even if join failed
+        os_setTimedCallback(&logicjob, os_getTime()+sec2osticks(1), do_logic);
+        break;
+    default:
+        // prevents compiler warnings
+        break;
+    }
+}
+
 void logic_job_init() {
     //***********************
     // RTC
@@ -408,8 +424,12 @@ void logic_job_init() {
 
     cur_state = READ_SENSORS; // set initial state to READ_SENSORS
 
-    // schedule first run
-    os_setTimedCallback(&logicjob, os_getTime()+sec2osticks(hochbeet_data.config->defaultSleepTimeSec), do_logic);
+    #ifdef OTAA
+    LMIC_registerEventCb(onJoinedCallback, NULL);
+    #else
+    // schedule first run only in APB mode, OTAA mode needs to wait for join, dirty hack, we should drop ABP support
+    os_setTimedCallback(&logicjob, os_getTime()+sec2osticks(5), do_logic);
+    #endif
 }
 
 //***************************

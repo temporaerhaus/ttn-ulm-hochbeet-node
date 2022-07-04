@@ -105,7 +105,7 @@ void onEvent (ev_t ev) {
             // Disable link check validation (automatically enabled
             // during join, but because slow data rates change max TX
 	        // size, we don't use it in this example.
-            //LMIC_setLinkCheckMode(0);
+            LMIC_setLinkCheckMode(0);
 
             break;
         /*
@@ -179,14 +179,11 @@ void onEvent (ev_t ev) {
 
 #ifdef OTAA
 void init_otaa() {
-    LMIC_setClockError(MAX_CLOCK_ERROR * 5 / 100 );
-    LMIC_setLinkCheckMode(1);
-    LMIC_setAdrMode(1);
     LMIC_startJoining();
 }
 #else
 void init_abp() {
-        // Set static session parameters. Instead of dynamically establishing a session
+    // Set static session parameters. Instead of dynamically establishing a session
     // by joining the network, precomputed session parameters are be provided.
     #ifdef PROGMEM
     // On AVR, these values are stored in flash and only copied to RAM
@@ -269,6 +266,7 @@ void init_abp() {
     // Set data rate and transmit power for uplink
     LMIC_setDrTxpow(DR_SF12,14);
 
+    
 }
 #endif
 
