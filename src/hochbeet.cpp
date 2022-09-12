@@ -19,8 +19,8 @@ void setup() {
     LMIC_reset();
 
     // init jobs
-    lora_job_init();
     logic_job_init();
+    lora_job_init();
 }
 
 //***************************
