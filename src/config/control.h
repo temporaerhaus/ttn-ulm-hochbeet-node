@@ -6,26 +6,26 @@
 // strcut to store config & parameters
 typedef struct {
     uint32_t            irrigationIntervalSec, // in milliseconds
-    irrigationDurationSec,
-            irrigationPauseSec,
-            txIntervalSec,
-            defaultSleepTimeSec;
-    float               tensiometerMaxPressure;
+                        irrigationDurationSec,
+                        irrigationPauseSec,
+                        txIntervalSec,
+                        defaultSleepTimeSec;
+    float              tensiometerMaxPressure;
 } hochbeet_config_t;
 
 // struct to store current state of hochbeet
 typedef struct {
     hochbeet_config_t   *config;
     uint32_t            timeLastPumpStart,
-            timeLastPumpStop,
-            timeLastIrrigationStart;
+                        timeLastPumpStop,
+                        timeLastIrrigationStart;
     float               temperature,
-            humidity,
-            airPressure,
-            tensiometerPressure,
-            tankDistance,
-            watertankPressure,
-            battery;
+                        humidity,
+                        airPressure,
+                        tensiometerPressure,
+                        tankDistance,
+                        watertankPressure,
+                        battery;
 
     uint32_t            timeLastDataSent;
     uint8_t             tensiometerInternalWaterLevel;
@@ -41,14 +41,14 @@ extern instance_data_t hochbeet_data;
 
 // tensiometer config
 typedef struct {
-    float   VminTyp,
-            VmaxTyp,
-            VrangeTyp,
-            maxPressure;
+    float               VminTyp,
+                        VmaxTyp,
+                        VrangeTyp,
+                        maxPressure;
 } tensiometer_config_t;
 
 extern tensiometer_config_t tensiometer_config_water_tank;
-extern tensiometer_config_t tensiometer_config_soil_moistor;
+extern tensiometer_config_t tensiometer_config_soil_moisture;
 
 
 #endif

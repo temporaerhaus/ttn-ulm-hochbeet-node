@@ -1,7 +1,7 @@
 #include "sensors.h"
 #include "config/pins.h"
 #include "config/control.h"
-#include <Adafruit_ADS1015.h>
+#include <Adafruit_ADS1X15.h>
 #include <VL6180X.h>
 
 void bubblesort(float *array, int length);
@@ -125,8 +125,8 @@ float read_tensiometer_pressure(Adafruit_ADS1115& ads) {
     float tensiometerPressure;
     float voltage = rawValue * 188.0f / 1000000.0f;
 
-    voltage = (voltage < tensiometer_config_soil_moistor.VminTyp) ? tensiometer_config_soil_moistor.VminTyp : voltage;
-    tensiometerPressure = 1.0 / tensiometer_config_soil_moistor.VrangeTyp * (voltage - tensiometer_config_soil_moistor.VminTyp) * tensiometer_config_soil_moistor.maxPressure;
+    voltage = (voltage < tensiometer_config_soil_moisture.VminTyp) ? tensiometer_config_soil_moisture.VminTyp : voltage;
+    tensiometerPressure = 1.0 / tensiometer_config_soil_moisture.VrangeTyp * (voltage - tensiometer_config_soil_moisture.VminTyp) * tensiometer_config_soil_moisture.maxPressure;
 
     #ifdef DEBUG
     Serial.print(rawValue);
@@ -144,7 +144,7 @@ float read_tensiometer_pressure(Adafruit_ADS1115& ads) {
 
 
 /**
- * Reads batery voltage
+ * Reads battery voltage
  */
 float read_battery(Adafruit_ADS1115& ads) {
 #ifdef TESTMODE

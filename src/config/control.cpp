@@ -24,11 +24,11 @@ instance_data_t hochbeet_data = {
         0.0f,  // tensio meter pressure
         0.0f,  // tank distance
         0.0f,  // watertank pressure
-        0,             //battery voltage
+        0,     // battery voltage
         0,     // time; last time data was sent via lorawan
         0,     // internal water level of the tensiometer
-        false,  // is water tank empty
-        false,  // is the bed full of water
+        false, // is water tank empty
+        false, // is the bed full of water
         false, // is the irrigation running
         true,  // bme available
         false  // was the bed watered on the last cycle
@@ -37,7 +37,7 @@ instance_data_t hochbeet_data = {
 // config soil moistore tensiometer
 // https://www.fujikura.co.jp/eng/products/electronics/sensors/04/2052856_13675.html
 // Fujikura AP20R-500KV
-tensiometer_config_t tensiometer_config_soil_moistor = {
+tensiometer_config_t tensiometer_config_soil_moisture = {
         .VminTyp = 0.2f,
         .VmaxTyp = 4.7f,
         .VrangeTyp = 4.5f,
